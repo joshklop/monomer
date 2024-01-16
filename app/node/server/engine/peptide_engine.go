@@ -2,11 +2,11 @@ package engine
 
 import (
 	"fmt"
-	"github.com/hashicorp/go-metrics"
+	//"github.com/hashicorp/go-metrics"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	"log"
 	"math/big"
-	"strconv"
+	//"strconv"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/beacon/engine"
@@ -245,7 +245,7 @@ func (e *ethLikeServer) GetBalance(address common.Address, id any) (hexutil.Big,
 
 func (e *ethLikeServer) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, error) {
 	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
+	//telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
 	b, err := e.node.GetBlock(hash.Bytes())
 	if err != nil {
@@ -256,7 +256,7 @@ func (e *ethLikeServer) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, 
 
 func (e *ethLikeServer) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
 	e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx)
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
+	//telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
 	b, err := e.node.GetBlock(id)
 	if err != nil {

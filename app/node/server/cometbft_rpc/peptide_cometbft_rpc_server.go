@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-metrics"
+	//"github.com/hashicorp/go-metrics"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	"log"
 	"sort"
-	"strconv"
+	//"strconv"
 	"time"
 
 	abciclient "github.com/cometbft/cometbft/abci/client"
@@ -422,8 +422,8 @@ func (c *CometServer) UnsubscribeAll(ctx *rpctypes.Context) (*ctypes.ResultUnsub
 //
 // NOTE: arg `hash` should be a hex string without 0x prefix
 func (c *CometServer) Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
-	telemetry.IncrCounterWithLabels([]string{"tx", "Tx"}, 1, []metrics.Label{telemetry.NewLabel("prove",
-		strconv.FormatBool(prove))})
+	//telemetry.IncrCounterWithLabels([]string{"tx", "Tx"}, 1, []metrics.Label{telemetry.NewLabel("prove",
+	//	strconv.FormatBool(prove))})
 
 	if prove {
 		c.logger.Error("prove is not supported")

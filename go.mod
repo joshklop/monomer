@@ -4,31 +4,37 @@ go 1.21.5
 
 //replace github.com/armon/go-metrics => github.com/hashicorp/go-metrics v0.5.3
 
-replace github.com/cosmos/cosmos-sdk/store => cosmossdk.io/store v1.0.0-alpha.1
+replace github.com/cosmos/cosmos-sdk/store => github.com/polymerdao/cosmos-sdk/store v1.0.0-alpha.1
 
-replace github.com/cosmos/cosmos-sdk/x/auth => cosmossdk.io/x/auth v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/auth => github.com/polymerdao/cosmos-sdk/x/auth v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/bank => cosmossdk.io/x/bank v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/bank => github.com/polymerdao/cosmos-sdk/x/bank v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/distribution => cosmossdk.io/x/distribution v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/distribution => github.com/polymerdao/cosmos-sdk/x/distribution v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/evidence => cosmossdk.io/x/evidence v0.1.0
+replace github.com/cosmos/cosmos-sdk/x/evidence => github.com/polymerdao/cosmos-sdk/x/evidence v0.1.0
 
-replace github.com/cosmos/cosmos-sdk/x/feegrant => cosmossdk.io/x/feegrant v0.1.0
+replace github.com/cosmos/cosmos-sdk/x/feegrant => github.com/polymerdao/cosmos-sdk/x/feegrant v0.1.0
 
-replace github.com/cosmos/cosmos-sdk/x/gov => cosmossdk.io/x/gov v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/gov => github.com/polymerdao/cosmos-sdk/x/gov v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/mint => cosmossdk.io/x/mint v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/mint => github.com/polymerdao/cosmos-sdk/x/mint v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/params => cosmossdk.io/x/params v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/params => github.com/polymerdao/cosmos-sdk/x/params v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/slashing => cosmossdk.io/x/slashing v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/slashing => github.com/polymerdao/cosmos-sdk/x/slashing v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/staking => cosmossdk.io/x/staking v0.0.0-20240116074620-753ac5d8507f
+replace github.com/cosmos/cosmos-sdk/x/staking => github.com/polymerdao/cosmos-sdk/x/staking v0.0.0-20240116074620-753ac5d8507f
 
-replace github.com/cosmos/cosmos-sdk/x/upgrade => cosmossdk.io/x/upgrade v0.1.1
+replace github.com/cosmos/cosmos-sdk/x/upgrade => github.com/polymerdao/cosmos-sdk/x/upgrade v0.1.1
 
-//replace github.com/cosmos/cosmos-sdk/client/grpc/tmservice => github.com/cosmos/cosmos-sdk/client/grpc/cmtservice v0.50.3
+replace github.com/cosmos/cosmos-sdk => github.com/polymerdao/cosmos-sdk v0.47.2-0.20231019015026-1f883c9977fd
+
+replace github.com/cosmos/gogoproto => github.com/polymerdao/gogoproto v0.0.0-20230905135849-dbeac9fa0743
+
+replace github.com/ethereum-optimism/optimism => github.com/polymerdao/optimism v0.0.0-20240104155453-efac2293b5b7
+
+replace github.com/ethereum/go-ethereum v1.13.1 => github.com/ethereum-optimism/op-geth v1.101301.0-rc.2.0.20231002141926-1e6910b91798
 
 require (
 	cloud.google.com/go v0.110.8 // indirect
