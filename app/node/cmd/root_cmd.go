@@ -21,8 +21,8 @@ import (
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
-	peptest "github.com/polymerdao/monomer/testutil/peptide"
-	"github.com/polymerdao/monomer/testutil/peptide/eeclient"
+	//peptest "github.com/polymerdao/monomer/testutil/peptide"
+	//"github.com/polymerdao/monomer/testutil/peptide/eeclient"
 	"github.com/spf13/cobra"
 )
 
@@ -78,7 +78,7 @@ func initCmd(appCreator AppCreator) *cobra.Command {
 			app := appCreator(config.ChainId, "", tmdb.NewMemDB(), logger)
 
 			// TODO use these testing accounts for now until we add proper account management
-			appState := app.SimpleGenesis(peptest.Accounts, peptest.ValidatorAccounts)
+			appState := app.SimpleGenesis(peptide.SignerAccounts{}, peptide.SignerAccounts{})
 			appStateBytes, err := json.Marshal(appState)
 			if err != nil {
 				return err
@@ -360,8 +360,8 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 
 	var genesis *node.PeptideGenesis
 	if initGenesis {
-		accounts := peptest.Accounts
-		validatorAccounts := peptest.ValidatorAccounts
+		accounts := peptide.SignerAccounts{}
+		validatorAccounts := peptide.SignerAccounts{}
 		stateBytes, err := json.Marshal(app.SimpleGenesis(accounts, validatorAccounts))
 		if err != nil {
 			return err
@@ -411,20 +411,20 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client, err := eeclient.NewEeClient(
-		context.Background(),
-		config.PeptideCometServerRpc.FullAddress("http"),
-		config.PeptideEngineServerRpc.FullAddress("http"),
-	)
-	if err != nil {
-		return err
-	}
+	//client, err := eeclient.NewEeClient(
+	//	context.Background(),
+	//	config.PeptideCometServerRpc.FullAddress("http"),
+	//	config.PeptideEngineServerRpc.FullAddress("http"),
+	//)
+	//if err != nil {
+	//	return err
+	//}
 
-	opnode := peptest.NewOpNodeMock(
-		nil,
-		client,
-		rand.New(rand.NewSource(int64(1234))),
-	)
+	//opnode := peptest.NewOpNodeMock(
+	//	nil,
+	//	client,
+	//	rand.New(rand.NewSource(int64(1234))),
+	//)
 
 	// Listen for the kill signals, this tells the client to stop
 	sigCh := make(chan os.Signal, 1)
@@ -439,10 +439,11 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 			case sig := <-sigCh:
 				logger.Info("Received signal", "signal", sig)
 				defer wg.Done()
-				opnode.Close()
+				//opnode.Close()
 				return
 			case <-ticker.C:
-				opnode.ProduceBlocks(1)
+				//opnode.ProduceBlocks(1)
+				logger.Info("this is where the op node would produce blocks")
 			default:
 			}
 		}
