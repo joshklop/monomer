@@ -20,8 +20,8 @@ import (
 	teststaking "github.com/cosmos/cosmos-sdk/x/staking/testutil"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/notbdu/gm/app"
-	"github.com/notbdu/gm/app/params"
+	"github.com/joshklop/gm/app"
+	"github.com/joshklop/gm/app/params"
 	"github.com/samber/lo"
 )
 

@@ -13,21 +13,21 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/notbdu/gm v0.0.0-20240130062431-6a10b64277ac
+	github.com/joshklop/gm v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.18.0
 	github.com/samber/lo v1.39.0
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.4
-	google.golang.org/genproto/googleapis/api v0.0.0-20230629202037-9506855d4529
-	google.golang.org/grpc v1.56.2
+	google.golang.org/genproto/googleapis/api v0.0.0-20230726155614-23370e0ffb3e
+	google.golang.org/grpc v1.57.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
-	cloud.google.com/go v0.110.4 // indirect
-	cloud.google.com/go/compute v1.20.1 // indirect
+	cloud.google.com/go v0.110.6 // indirect
+	cloud.google.com/go/compute v1.23.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
-	cloud.google.com/go/iam v1.1.0 // indirect
+	cloud.google.com/go/iam v1.1.1 // indirect
 	cloud.google.com/go/storage v1.30.1 // indirect
 	cosmossdk.io/api v0.3.1 // indirect
 	cosmossdk.io/core v0.5.1 // indirect
@@ -69,7 +69,7 @@ require (
 	github.com/cosmos/iavl v0.20.0 // indirect
 	github.com/cosmos/ibc-go/v7 v7.1.0 // indirect
 	github.com/cosmos/ics23/go v0.10.0 // indirect
-	github.com/cosmos/ledger-cosmos-go v0.12.1 // indirect
+	github.com/cosmos/ledger-cosmos-go v0.13.0 // indirect
 	github.com/cosmos/rosetta-sdk-go v0.10.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/crate-crypto/go-kzg-4844 v0.7.0 // indirect
@@ -122,9 +122,9 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
-	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.5 // indirect
-	github.com/hashicorp/hcl v1.0.0 // indirect
+	github.com/hashicorp/hcl v1.0.1-0.20190611123218-cf7d376da96d // indirect
 	github.com/hdevalence/ed25519consensus v0.1.0 // indirect
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/huandu/skiplist v1.2.0 // indirect
@@ -172,6 +172,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20230317030725-371a4b8eda08 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/polymerdao/polymerase/chain v0.0.0-20240206152953-ccebffd0a782 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
@@ -221,13 +222,13 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.126.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230706204954-ccb25ca9f130 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
+	google.golang.org/genproto v0.0.0-20230803162519-f966b187b2e5 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230815205213-6bfd019c3878 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
-	nhooyr.io/websocket v1.8.6 // indirect
+	nhooyr.io/websocket v1.8.7 // indirect
 	pgregory.net/rapid v0.5.5 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
@@ -243,5 +244,8 @@ replace (
 	// use OP's fork of op-geth
 	github.com/ethereum/go-ethereum v1.13.5 => github.com/ethereum-optimism/op-geth v1.101305.2-rc.2.0.20240117002010-d5f142e54a0a
 )
+
+replace github.com/joshklop/gm => ../gm
+replace github.com/polymerdao/polymerase/chain => ../polymerase/chain
 
 go 1.21.5

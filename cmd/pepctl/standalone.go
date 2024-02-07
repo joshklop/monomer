@@ -182,7 +182,6 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 				return
 			case <-ticker.C:
 				opnode.ProduceBlocks(1)
-			default:
 			}
 		}
 	}()
