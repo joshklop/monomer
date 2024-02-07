@@ -246,6 +246,7 @@ replace (
 )
 
 replace github.com/joshklop/gm => ../gm
+replace github.com/joshklop/x => ../x
 replace github.com/polymerdao/polymerase/chain => ../polymerase/chain
 
 go 1.21.5

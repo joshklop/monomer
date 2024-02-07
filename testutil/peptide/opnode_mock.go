@@ -20,7 +20,7 @@ import (
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/testutil/peptide/eeclient"
-	"github.com/polymerdao/monomer/x/rollup/types"
+	"github.com/joshklop/x/rollup/types"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/suite"
 )

@@ -42,7 +42,7 @@ import (
 	rpcee "github.com/polymerdao/monomer/app/peptide/rpc_ee"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"
-	rolluptypes "github.com/polymerdao/monomer/x/rollup/types"
+	rolluptypes "github.com/joshklop/x/rollup/types"
 	"github.com/samber/lo"
 )
 

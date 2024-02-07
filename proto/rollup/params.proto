@@ -3,7 +3,7 @@ package rollup;
 
 import "gogoproto/gogo.proto";
 
-option go_package = "github.com/polymerdao/monomer/x/rollup/types";
+option go_package = "github.com/joshklop/x/rollup/types";
 
 // Params defines the parameters for the module.
 message Params {
