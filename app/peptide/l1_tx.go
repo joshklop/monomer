@@ -4,7 +4,7 @@ import (
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	rolluptypes "github.com/joshklop/x/rollup/types"
+	rolluptypes "github.com/joshklop/x-rollup/types"
 )
 
 // GetETH returns the ETH balance of an account in wei

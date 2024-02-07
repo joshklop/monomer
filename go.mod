@@ -10,8 +10,8 @@ require (
 	github.com/cosmos/gogoproto v1.4.10
 	github.com/ethereum-optimism/optimism v1.4.2
 	github.com/ethereum/go-ethereum v1.13.5
-	github.com/joshklop/gm v0.0.0-00010101000000-000000000000
-	github.com/joshklop/x v0.0.0-00010101000000-000000000000
+	github.com/joshklop/gm-monomer v0.0.0-20240207043349-033be6863354
+	github.com/joshklop/x-rollup v0.0.0-20240207043159-1e38759f68b0
 	github.com/prometheus/client_golang v1.18.0
 	github.com/samber/lo v1.39.0
 	github.com/spf13/cobra v1.6.1
@@ -244,10 +244,6 @@ replace (
 	// use OP's fork of op-geth
 	github.com/ethereum/go-ethereum v1.13.5 => github.com/ethereum-optimism/op-geth v1.101305.2-rc.2.0.20240117002010-d5f142e54a0a
 )
-
-replace github.com/joshklop/gm => ../gm
-
-replace github.com/joshklop/x => ../x
 
 replace github.com/polymerdao/polymerase/chain => ../polymerase/chain
 

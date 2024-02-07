@@ -3,7 +3,7 @@ package rollup;
 
 // import "gogoproto/gogo.proto";
 
-option go_package = "github.com/joshklop/x/rollup/types";
+option go_package = "github.com/joshklop/x-rollup/types";
 
 // Msg defines all tx endpoints for the rollup module.
 service Msg {

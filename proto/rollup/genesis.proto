@@ -2,7 +2,7 @@ syntax = "proto3";
 package rollup;
 
 
-option go_package = "github.com/joshklop/x/rollup/types";
+option go_package = "github.com/joshklop/x-rollup/types";
 
 // GenesisState defines the polyibc module's genesis state.
 message GenesisState {
