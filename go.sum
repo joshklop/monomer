@@ -1211,8 +1211,6 @@ github.com/polymerdao/gogoproto v0.0.0-20230905135849-dbeac9fa0743 h1:xf7QUvGTNz
 github.com/polymerdao/gogoproto v0.0.0-20230905135849-dbeac9fa0743/go.mod h1:NPtiVAbpYIlRjEUSpLgWMUYuxzR8NR2zLntWcm15N6o=
 github.com/polymerdao/optimism-dev v1.4.2-polymer-1.1 h1:77FMQ9XyAqBYzUvELeWTaMXY4b5b88V3pZBuWBNwIWE=
 github.com/polymerdao/optimism-dev v1.4.2-polymer-1.1/go.mod h1:WM/IIHxyLrp4zxLEwp56Y12PemgPpMIXmHrxgWw9AXQ=
-github.com/polymerdao/polymerase/chain v0.0.0-20240206152953-ccebffd0a782 h1:aTW4VWVAeaLlVvjHpWuFPsyeOfhXg1fv20OjQDts+Cs=
-github.com/polymerdao/polymerase/chain v0.0.0-20240206152953-ccebffd0a782/go.mod h1:AVVu0VWKEqeVkRa+fxoKuhFxLrjKQTXlDW3Dj9sbD3k=
 github.com/posener/complete v1.1.1/go.mod h1:em0nMJCgc9GFtwrmVmEMR/ZL6WyhyjMBndrE9hABlRI=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829/go.mod h1:p2iRAGwDERtqlqzRXnrOVns+ignqQo//hLXqYxZYVNs=
