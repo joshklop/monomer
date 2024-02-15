@@ -152,7 +152,7 @@ func (b *Block) Transactions() (types.Transactions, Hash) {
 	}
 
 	for _, l2tx := range b.Txs {
-		//TODO: update to use proper Gas and To values if possible
+		// TODO: update to use proper Gas and To values if possible
 		txData := &types.DynamicFeeTx{
 			ChainID: chainId,
 			Data:    l2tx,

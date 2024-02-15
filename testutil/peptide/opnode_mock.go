@@ -16,11 +16,11 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/joshklop/x-rollup/types"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/testutil/peptide/eeclient"
-	"github.com/joshklop/x-rollup/types"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/suite"
 )

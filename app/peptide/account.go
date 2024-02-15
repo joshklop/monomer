@@ -18,9 +18,11 @@ var (
 	_ PrivKey        = (*secp256k1.PrivKey)(nil)
 )
 
-type GenesisAccount = authtypes.GenesisAccount
-type AccountI = authtypes.AccountI
-type PrivKey = cryptotypes.PrivKey
+type (
+	GenesisAccount = authtypes.GenesisAccount
+	AccountI       = authtypes.AccountI
+	PrivKey        = cryptotypes.PrivKey
+)
 
 // type PrivKey = cryptotypes.LedgerPrivKey
 
@@ -70,7 +72,7 @@ func (a SignerAccounts) NewBalances(denom string, amount sdk.Int) []banktypes.Ba
 }
 
 func MergeBalances(balancesSlice ...[]banktypes.Balance) []banktypes.Balance {
-	var mergedMap = make(map[string]sdk.Coins)
+	mergedMap := make(map[string]sdk.Coins)
 	for _, balances := range balancesSlice {
 		for _, balance := range balances {
 			match, ok := mergedMap[balance.Address]

@@ -1,11 +1,12 @@
 package node
 
 import (
-	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"os"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/samber/lo"
@@ -39,6 +40,7 @@ func (s *genesisTestSuite) SetupTest() {
 		InitialHeight: 5,
 	}
 }
+
 func (s *genesisTestSuite) TearDownTest() {
 	os.RemoveAll(s.homedir)
 }

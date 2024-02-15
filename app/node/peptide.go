@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"log"
 	"math/big"
 	"net"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 
 	"github.com/armon/go-metrics"
 	tmdb "github.com/cometbft/cometbft-db"
@@ -32,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
+	rolluptypes "github.com/joshklop/x-rollup/types"
 	"github.com/polymerdao/monomer/app/node/server"
 	cometbft_rpc "github.com/polymerdao/monomer/app/node/server/cometbft_rpc"
 	"github.com/polymerdao/monomer/app/node/server/engine"
@@ -42,7 +44,6 @@ import (
 	rpcee "github.com/polymerdao/monomer/app/peptide/rpc_ee"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"
-	rolluptypes "github.com/joshklop/x-rollup/types"
 	"github.com/samber/lo"
 )
 
@@ -53,10 +54,12 @@ const (
 	TxStoreDbName    = "txstore"
 )
 
-type Endpoint = server.Endpoint
-type NodeInfo = cometbft_rpc.NodeInfo
-type Block = eetypes.Block
-type Hash = eetypes.Hash
+type (
+	Endpoint = server.Endpoint
+	NodeInfo = cometbft_rpc.NodeInfo
+	Block    = eetypes.Block
+	Hash     = eetypes.Hash
+)
 
 type AbciClientCreator = func(app abcitypes.Application) abciclient.Client
 
@@ -79,7 +82,8 @@ func NewPeptideNode(
 	clientCreator AbciClientCreator,
 	genesis *PeptideGenesis,
 	enabledApis server.ApiEnabledMask,
-	logger server.Logger) *PeptideNode {
+	logger server.Logger,
+) *PeptideNode {
 	bs := store.NewBlockStore(bsdb, eetypes.BlockUnmarshaler)
 	txstore := txstore.NewTxStore(txstoreDb, logger)
 	node := newNode(chainApp, clientCreator, bs, txstore, genesis, logger.With("module", "node"))
@@ -106,7 +110,8 @@ func NewPeptideNodeFromConfig(
 	bsdb tmdb.DB,
 	txstoreDb tmdb.DB,
 	genesis *PeptideGenesis,
-	config *server.Config) (*PeptideNode, error) {
+	config *server.Config,
+) (*PeptideNode, error) {
 	// TODO: enable abci servers too if configured
 	return NewPeptideNode(
 		bsdb,
@@ -217,7 +222,8 @@ func (cs *PeptideNode) EngineServerAddress() net.Addr {
 var _ service.Service = (*PeptideNode)(nil)
 
 func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs store.BlockStore,
-	txstore txstore.TxStore, genesis *PeptideGenesis, logger tmlog.Logger) *PeptideNode {
+	txstore txstore.TxStore, genesis *PeptideGenesis, logger tmlog.Logger,
+) *PeptideNode {
 	cs := &PeptideNode{
 		genesis:       genesis,
 		clientCreator: clientCreator,
@@ -503,7 +509,6 @@ func (cs *PeptideNode) getBlockByString(str string) eetypes.BlockData {
 }
 
 func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
-
 	cs.logger.Info("trying: PeptideNode.GetBlock", "id", id)
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
@@ -748,7 +753,6 @@ func (cs *PeptideNode) ExportState(ctx *rpctypes.Context, commit bool, path stri
 //
 // Call ExportState if you need to persist the current state, since ImportState will reset the chainApp state.
 func (cs *PeptideNode) ImportState(ctx *rpctypes.Context, path string, initHeight int64) (*ImportExportResponse, error) {
-
 	exportedBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

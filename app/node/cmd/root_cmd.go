@@ -3,10 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/cosmos/cosmos-sdk/telemetry"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/cosmos/cosmos-sdk/telemetry"
 
 	tmdb "github.com/cometbft/cometbft-db"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -174,8 +175,10 @@ func startCmd() *cobra.Command {
 			defer appdb.Close()
 
 			_, err = telemetry.New(
-				telemetry.Config{Enabled: true, EnableHostname: false, EnableHostnameLabel: false,
-					PrometheusRetentionTime: config.PrometheusRetentionTime},
+				telemetry.Config{
+					Enabled: true, EnableHostname: false, EnableHostnameLabel: false,
+					PrometheusRetentionTime: config.PrometheusRetentionTime,
+				},
 			)
 			if err != nil {
 				return err

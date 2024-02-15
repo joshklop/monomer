@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/cosmos/cosmos-sdk/telemetry"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/cosmos/cosmos-sdk/telemetry"
 
 	tmdb "github.com/cometbft/cometbft-db"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -121,8 +122,10 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 	defer bsdb.Close()
 
 	_, err := telemetry.New(
-		telemetry.Config{Enabled: true, EnableHostname: false, EnableHostnameLabel: false,
-			PrometheusRetentionTime: config.PrometheusRetentionTime},
+		telemetry.Config{
+			Enabled: true, EnableHostname: false, EnableHostnameLabel: false,
+			PrometheusRetentionTime: config.PrometheusRetentionTime,
+		},
 	)
 	if err != nil {
 		return err

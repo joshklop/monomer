@@ -325,7 +325,7 @@ func (c *CometServer) Subscribe(ctx *rpctypes.Context, query string) (*ctypes.Re
 
 	// settings for ws clients
 	subscriptionID := ctx.JSONReq.ID
-	var closeIfSlow = true
+	closeIfSlow := true
 
 	// push events to ws client
 	go func() {
@@ -517,7 +517,6 @@ func (c *CometServer) TxSearch(
 	}
 
 	return &ctypes.ResultTxSearch{Txs: apiResults, TotalCount: totalCount}, nil
-
 }
 
 // Block queries block by height.

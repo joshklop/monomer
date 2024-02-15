@@ -19,8 +19,10 @@ import (
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 )
 
-type Hash = eetypes.Hash
-type Block = eetypes.Block
+type (
+	Hash  = eetypes.Hash
+	Block = eetypes.Block
+)
 
 type Node interface {
 	LastBlockHeight() int64
@@ -114,7 +116,6 @@ func (e *engineAPIserver) ForkchoiceUpdatedV3(
 	fcs eth.ForkchoiceState,
 	pa eth.PayloadAttributes,
 ) (*eth.ForkchoiceUpdatedResult, error) {
-
 	e.logger.Debug("trying: ForkchoiceUpdatedV3",
 		"appHeight", e.node.LastBlockHeight()+1,
 		"unsafe", fcs.HeadBlockHash.Hex(),
@@ -197,7 +198,6 @@ func (e *engineAPIserver) ForkchoiceUpdatedV3(
 		// TODO check for invalid txs in pa
 		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.node.LastBlockHeight()+1)
 		payloadId, err := payload.GetPayloadID()
-
 		if err != nil {
 			return nil, engine.InvalidPayloadAttributes.With(err)
 		}

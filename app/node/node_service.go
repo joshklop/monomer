@@ -43,7 +43,8 @@ func (t *tmRpc) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes)
 }
 
 func (t *tmRpc) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes,
-	opts client.ABCIQueryOptions) (*ctypes.ResultABCIQuery, error) {
+	opts client.ABCIQueryOptions,
+) (*ctypes.ResultABCIQuery, error) {
 	return nil, errors.New("not implemented")
 }
 

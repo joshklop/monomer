@@ -3,11 +3,12 @@ package node
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -19,7 +20,7 @@ type PeptideGenesis struct {
 	AppState      []byte      `json:"app_state"`
 	L1            eth.BlockID `json:"l1"`
 	InitialHeight int64       `json:"initial_height"`
-	//TODO add missing stuff
+	// TODO add missing stuff
 }
 
 func (p *PeptideGenesis) Validate() error {
@@ -54,7 +55,7 @@ func fileExists(filename string) bool {
 
 func (p *PeptideGenesis) Save(homedir string, override bool) error {
 	genFile := filepath.Join(homedir, "config", "genesis.json")
-	if err := os.MkdirAll(filepath.Dir(genFile), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(genFile), 0o700); err != nil {
 		return err
 	}
 
@@ -68,7 +69,7 @@ func (p *PeptideGenesis) Save(homedir string, override bool) error {
 		return err
 	}
 
-	if err := os.WriteFile(genFile, genesis, 0644); err != nil {
+	if err := os.WriteFile(genFile, genesis, 0o644); err != nil {
 		return err
 	}
 

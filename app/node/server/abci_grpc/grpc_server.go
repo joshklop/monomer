@@ -48,7 +48,7 @@ func NewGRPCServer(protoAddr, name string, registerService registerFunc, logger 
 }
 
 func NewAbciGRPCServer(protoAddr string, app types.ABCIApplicationServer) service.Service {
-	var register = func(s *grpc.Server) error {
+	register := func(s *grpc.Server) error {
 		types.RegisterABCIApplicationServer(s, app)
 		return nil
 	}
@@ -57,7 +57,7 @@ func NewAbciGRPCServer(protoAddr string, app types.ABCIApplicationServer) servic
 }
 
 func NewChainAppGRPCServer(protoAddr string, app *peptide.PeptideApp) service.Service {
-	var register = func(s *grpc.Server) error {
+	register := func(s *grpc.Server) error {
 		// Register reflection service on gRPC server.
 		app.RegisterGRPCServer(s)
 		// Reflection allows consumers to build dynamic clients that can write to any
