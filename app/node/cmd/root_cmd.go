@@ -195,10 +195,13 @@ func startCmd() *cobra.Command {
 			txIndexerDb := server.OpenDB(node.TxStoreDbName, config)
 			defer txIndexerDb.Close()
 
+			mempoolDb := server.OpenDB(node.MempoolDbName, config)
+			defer txIndexerDb.Close()
+
 			bsdb := server.OpenDB(node.BlockStoreDbName, config)
 			defer bsdb.Close()
 
-			peptideNode, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, genesis, config)
+			peptideNode, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, mempoolDb, genesis, config)
 			if err != nil {
 				return fmt.Errorf("failed to create peptide node: %w", err)
 			}

@@ -43,6 +43,7 @@ func (s *ChainServerTestSuite) SetupTest() {
 	appdb := tmdb.NewMemDB()
 	bsdb := tmdb.NewMemDB()
 	txIndexerDb := tmdb.NewMemDB()
+	mempoolDb := tmdb.NewMemDB()
 	chainId := "123"
 	app := peptide.New(chainId, "", appdb, logger)
 
@@ -66,6 +67,7 @@ func (s *ChainServerTestSuite) SetupTest() {
 	node := NewPeptideNode(
 		bsdb,
 		txIndexerDb,
+		mempoolDb,
 		&appEndpoint,
 		&eeEndpoint,
 		app,

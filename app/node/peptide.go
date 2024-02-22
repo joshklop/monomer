@@ -44,6 +44,7 @@ import (
 	rpcee "github.com/polymerdao/monomer/app/peptide/rpc_ee"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"
+	"github.com/polymerdao/monomer/mempool"
 	"github.com/samber/lo"
 )
 
@@ -52,6 +53,7 @@ const (
 	AppStateDbName   = "appstate"
 	BlockStoreDbName = "blockstore"
 	TxStoreDbName    = "txstore"
+	MempoolDbName    = "mempool"
 )
 
 type (
@@ -76,6 +78,7 @@ func NewLocalClient(app abcitypes.Application) abciclient.Client {
 func NewPeptideNode(
 	bsdb tmdb.DB,
 	txstoreDb tmdb.DB,
+	mempooldb tmdb.DB,
 	appEndpoint *Endpoint,
 	eeEndpoint *Endpoint,
 	chainApp *peptide.PeptideApp,
@@ -86,7 +89,7 @@ func NewPeptideNode(
 ) *PeptideNode {
 	bs := store.NewBlockStore(bsdb, eetypes.BlockUnmarshaler)
 	txstore := txstore.NewTxStore(txstoreDb, logger)
-	node := newNode(chainApp, clientCreator, bs, txstore, genesis, logger.With("module", "node"))
+	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, genesis, logger.With("module", "node"))
 	cometServer, cometRpcServer := cometbft_rpc.NewCometRpcServer(
 		node,
 		appEndpoint.FullAddress(),
@@ -109,6 +112,7 @@ func NewPeptideNodeFromConfig(
 	app *peptide.PeptideApp,
 	bsdb tmdb.DB,
 	txstoreDb tmdb.DB,
+	mempooldb tmdb.DB,
 	genesis *PeptideGenesis,
 	config *server.Config,
 ) (*PeptideNode, error) {
@@ -116,6 +120,7 @@ func NewPeptideNodeFromConfig(
 	return NewPeptideNode(
 		bsdb,
 		txstoreDb,
+		mempooldb,
 		&config.PeptideCometServerRpc,
 		&config.PeptideEngineServerRpc,
 		app,
@@ -188,7 +193,7 @@ type PeptideNode struct {
 
 	ps payloadstore.PayloadStore
 	// L2 txs are stored in mempool until block is sealed
-	txMempool bfttypes.Txs
+	txMempool *mempool.Pool
 
 	// Node components
 	cometServer    *cometbft_rpc.CometServer
@@ -222,7 +227,7 @@ func (cs *PeptideNode) EngineServerAddress() net.Addr {
 var _ service.Service = (*PeptideNode)(nil)
 
 func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs store.BlockStore,
-	txstore txstore.TxStore, genesis *PeptideGenesis, logger tmlog.Logger,
+	txstore txstore.TxStore, mempoolStorage tmdb.DB, genesis *PeptideGenesis, logger tmlog.Logger,
 ) *PeptideNode {
 	cs := &PeptideNode{
 		genesis:       genesis,
@@ -234,6 +239,7 @@ func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs s
 		engineMode:    true,
 		ps:            payloadstore.NewPayloadStore(),
 		lock:          sync.RWMutex{},
+		txMempool:     mempool.New(mempoolStorage),
 	}
 	cs.BaseService = service.NewBaseService(logger, "PeptideNode", cs)
 
@@ -444,7 +450,9 @@ func (cs *PeptideNode) AddToTxMempool(tx bfttypes.Tx) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
 
-	cs.txMempool = append(cs.txMempool, tx)
+	if err := cs.txMempool.Enqueue([]byte(tx)); err != nil {
+		panic(fmt.Errorf("enqueue: %v", err))
+	}
 }
 
 type ValidatorInfo = ctypes.ValidatorInfo
@@ -645,9 +653,24 @@ func (cs *PeptideNode) applyL1Txs(block *Block) {
 // applyBlockL2Txs applies L2 txs to the block that's currently being built.
 func (cs *PeptideNode) applyBlockL2Txs(block *Block) {
 	// TODO: ensure txs size doesn't exceed block size limit
-	block.Txs = cs.txMempool
+	blockTxs := make(bfttypes.Txs, 0)
+	for {
+		length, err := cs.txMempool.Len()
+		if err != nil {
+			panic(fmt.Errorf("enqueue: %v", err))
+		}
+		if length == 0 {
+			break
+		}
+
+		tx, err := cs.txMempool.Dequeue()
+		if err != nil {
+			panic(fmt.Errorf("dequeue: %v", err))
+		}
+		blockTxs = append(blockTxs, tx)
+	}
+	block.Txs = blockTxs
 	cs.deliverTxs(block.Txs)
-	cs.txMempool = nil
 }
 
 // indexAndPublishAllTxs indexes all txs in the block that's currently being built.

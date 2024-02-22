@@ -118,6 +118,9 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 	txIndexerDb := server.OpenDB(node.TxStoreDbName, config)
 	defer txIndexerDb.Close()
 
+	mempoolDb := server.OpenDB(node.MempoolDbName, config)
+	defer mempoolDb.Close()
+
 	bsdb := server.OpenDB(node.BlockStoreDbName, config)
 	defer bsdb.Close()
 
@@ -148,7 +151,7 @@ func runStandalone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	node, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, genesis, config)
+	node, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, mempoolDb, genesis, config)
 	if err != nil {
 		return err
 	}

@@ -82,6 +82,9 @@ func runProfileStoreRollback(cmd *cobra.Command, args []string) error {
 	txIndexerDb := server.OpenDBextended(node.TxStoreDbName, config.HomeDir, txtype)
 	defer txIndexerDb.Close()
 
+	mempoolDb := server.OpenDBextended(node.MempoolDbName, config.HomeDir, txtype)
+	defer mempoolDb.Close()
+
 	bsdb := server.OpenDBextended(node.BlockStoreDbName, config.HomeDir, bstype)
 	defer bsdb.Close()
 
@@ -97,7 +100,7 @@ func runProfileStoreRollback(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	node, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, genesis, config)
+	node, err := node.NewPeptideNodeFromConfig(app, bsdb, txIndexerDb, mempoolDb, genesis, config)
 	if err != nil {
 		return err
 	}
