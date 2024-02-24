@@ -9,6 +9,6 @@ import (
 
 // GetETH returns the ETH balance of an account in wei
 func (a *PeptideApp) GetETH(addr sdk.AccAddress, height int64) (*sdkmath.Int, error) {
-	resp := MustGetResponseWithHeight(new(banktypes.QueryBalanceResponse), a, &banktypes.QueryBalanceRequest{Address: addr.String(), Denom: rolluptypes.ETH}, "/cosmos.bank.v1beta1.Query/Balance", height)
+	resp := MustGetResponseWithHeight(new(banktypes.QueryBalanceResponse), a.App, &banktypes.QueryBalanceRequest{Address: addr.String(), Denom: rolluptypes.ETH}, "/cosmos.bank.v1beta1.Query/Balance", height)
 	return &resp.Balance.Amount, nil
 }

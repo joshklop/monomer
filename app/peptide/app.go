@@ -7,7 +7,6 @@ import (
 
 	tmdb "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
-	tmjson "github.com/cometbft/cometbft/libs/json"
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	tmtypes "github.com/cometbft/cometbft/types"
@@ -29,7 +28,7 @@ import (
 type PeptideApp struct {
 	// App is the ABCI-compatible App
 	// TODO: IMPORT YOUR ABCI APP HERE
-	*app.App
+	App *app.App
 
 	ValSet               *tmtypes.ValidatorSet
 	EncodingConfig       *params.EncodingConfig
@@ -160,7 +159,7 @@ func (a *PeptideApp) InitChainWithGenesisState(state app.GenesisState) abci.Resp
 		AppStateBytes:   stateBytes,
 	}
 	// InitChain updates deliverState which is required when app.NewContext is called
-	return a.InitChain(*req)
+	return a.App.InitChain(*req)
 }
 
 func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int64) abci.ResponseInitChain {
@@ -171,7 +170,7 @@ func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int
 		Time:            time.Now(),
 		InitialHeight:   height,
 	}
-	return a.InitChain(*req)
+	return a.App.InitChain(*req)
 }
 
 // This is what initiates the chain app initialisation. It's only meant to be called when the genesis is
@@ -180,7 +179,7 @@ func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int
 // - Commits the app state to disk so it can be persisted across executions
 // - Returns a "genesis header" with the genesis block height and app state hash
 func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time.Time) *tmproto.Header {
-	response := a.InitChain(abci.RequestInitChain{
+	response := a.App.InitChain(abci.RequestInitChain{
 		ChainId:         a.ChainId,
 		ConsensusParams: DefaultConsensusParams,
 		AppStateBytes:   appState,
@@ -190,11 +189,11 @@ func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time
 
 	// this will store the app state into disk. Failing to call this will result in missing data the next
 	// time the app is called
-	a.Commit()
+	a.App.Commit()
 
 	// use LastBlockHeight() since it might not be the same as InitialHeight.
 	return &tmproto.Header{
-		Height:             a.LastBlockHeight(),
+		Height:             a.App.LastBlockHeight(),
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
@@ -211,7 +210,7 @@ func (a *PeptideApp) initValSetFromGenesis(genesisStateBytes []byte) error {
 	}
 
 	var stakingGenesis stakingtypes.GenesisState
-	a.AppCodec().MustUnmarshalJSON(genesisState[stakingtypes.ModuleName], &stakingGenesis)
+	a.App.AppCodec().MustUnmarshalJSON(genesisState[stakingtypes.ModuleName], &stakingGenesis)
 
 	valset, err := teststaking.ToTmValidators(stakingGenesis.Validators, a.VotingPowerReduction)
 	if err != nil {
@@ -227,7 +226,7 @@ func (a *PeptideApp) initValSetFromGenesis(genesisStateBytes []byte) error {
 func (a *PeptideApp) Resume(lastHeader *tmproto.Header, genesisState []byte) error {
 	a.lastHeader = lastHeader
 	a.currentHeader = &tmproto.Header{
-		Height:             a.LastBlockHeight() + 1,
+		Height:             a.App.LastBlockHeight() + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
@@ -237,21 +236,21 @@ func (a *PeptideApp) Resume(lastHeader *tmproto.Header, genesisState []byte) err
 		return err
 	}
 
-	a.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
+	a.App.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
 	return nil
 }
 
 // Rolls back the app state (i.e. commit multi store from the base app) to the specified height (version)
 // If successful, the latest committed version is that of "height"
 func (a *PeptideApp) RollbackToHeight(height int64) error {
-	cms := a.CommitMultiStore()
+	cms := a.App.CommitMultiStore()
 	return cms.RollbackToVersion(height)
 }
 
 // DefaultGenesis create a default GenesisState, which is a map
 // with module name as keys and JSON-marshaled genesisState per module as values
 func (a *PeptideApp) DefaultGenesis() app.GenesisState {
-	return app.NewDefaultGenesisState(a.AppCodec())
+	return app.NewDefaultGenesisState(a.App.AppCodec())
 }
 
 // SimpleGenesis creates a genesis with given genesis accounts `genAccs` and one derived validator.
@@ -295,7 +294,7 @@ func (a *PeptideApp) MultiDelegationGenesis(
 	// set x/auth genesis
 	//
 	authGenesis := authtypes.NewGenesisState(authtypes.DefaultParams(), genAccs)
-	genesisState[authtypes.ModuleName] = a.AppCodec().MustMarshalJSON(authGenesis)
+	genesisState[authtypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(authGenesis)
 
 	stakingValidators, stakingDelegations, totalValidatorSetBond := newStakingValidators(
 		validators, delegators, delegations,
@@ -320,7 +319,7 @@ func (a *PeptideApp) MultiDelegationGenesis(
 	// set x/staking genesis
 	//
 	stakingGenesis := stakingtypes.NewGenesisState(stakingtypes.DefaultParams(), stakingValidators, stakingDelegations)
-	genesisState[stakingtypes.ModuleName] = a.AppCodec().MustMarshalJSON(stakingGenesis)
+	genesisState[stakingtypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(stakingGenesis)
 
 	//
 	// set x/bank genesis
@@ -332,7 +331,7 @@ func (a *PeptideApp) MultiDelegationGenesis(
 		[]banktypes.Metadata{},
 		[]banktypes.SendEnabled{},
 	)
-	genesisState[banktypes.ModuleName] = a.AppCodec().MustMarshalJSON(bankGenesis)
+	genesisState[banktypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(bankGenesis)
 
 	// Set app validators for block production
 	a.ValSet = tmtypes.NewValidatorSet(
@@ -341,33 +340,13 @@ func (a *PeptideApp) MultiDelegationGenesis(
 	return genesisState
 }
 
-// Clone returns a new PeptideApp with genesis state from the current PeptideApp.
-// The new app will have the same validator set `ValSet` as the current app.
-// Note the new PeptideApp is not committed yet. Call CommitAndBeginBlock to commit.
-//
-// Useful for testing module genesis export/import.
-func (a *PeptideApp) Clone() *PeptideApp {
-	cloned := New(a.ChainId, "/tmp/monomer-PeptideApp", tmdb.NewMemDB(), a.Logger())
-	cloned.ValSet = a.ValSet.Copy()
-	cloned.InitChainWithGenesisState(a.ExportGenesis())
-	return cloned
-}
-
-// ExportGenesis returns a copy of the app's genesis state
-func (a *PeptideApp) ExportGenesis() app.GenesisState {
-	exportedApp := lo.Must(a.ExportAppStateAndValidators(false, nil, nil))
-	var genesisState app.GenesisState
-	lo.Must0(tmjson.Unmarshal(exportedApp.AppState, &genesisState))
-	return genesisState
-}
-
 // Commit pending changes to chain state and start a new block.
 // Will error if there is no deliverState, eg. InitChain is not called before first block.
 func (a *PeptideApp) CommitAndBeginNextBlock(timestamp eth.Uint64Quantity) *PeptideApp {
-	a.Commit()
+	a.App.Commit()
 	a.OnCommit(timestamp)
 
-	a.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
+	a.App.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
 	return a
 }
 
@@ -376,12 +355,12 @@ func (a *PeptideApp) OnCommit(timestamp eth.Uint64Quantity) {
 	// update last header to the committed time and app hash
 	lastHeader := a.currentHeader
 	lastHeader.Time = time.Unix(int64(timestamp), 0)
-	lastHeader.AppHash = a.LastCommitID().Hash
+	lastHeader.AppHash = a.App.LastCommitID().Hash
 	a.lastHeader = lastHeader
 
 	// start a new partial header for next round
 	a.currentHeader = &tmproto.Header{
-		Height:             a.LastBlockHeight() + 1,
+		Height:             a.App.LastBlockHeight() + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
@@ -401,17 +380,7 @@ func (a *PeptideApp) LastHeader() *tmproto.Header {
 
 // Return a Cosmos-SDK context
 func (a *PeptideApp) NewUncachedSdkContext() sdk.Context {
-	return a.NewUncachedContext(false, *a.LastHeader())
-}
-
-// Return a SDK context wrapped in Go context, which is required by GRPC handler
-func (a *PeptideApp) NewWrappedUncachedContext() context.Context {
-	return a.WrapSDKContext(a.NewUncachedSdkContext())
-}
-
-// Return a SDK context wrapped in Go context, which is required by GRPC handler
-func (a *PeptideApp) NewUncachedContextWithHeight(height int64) context.Context {
-	return a.WrapSDKContext(a.NewUncachedSdkContext().WithBlockHeight(height))
+	return a.App.NewUncachedContext(false, *a.LastHeader())
 }
 
 // Convert a SDK context to Go context
@@ -429,45 +398,6 @@ func (a *PeptideApp) SignMsgs(signers []*SignerAccount, msg ...sdk.Msg) (sdk.Tx,
 		signers...,
 	)
 	return tx, err
-}
-
-// SignAndDeliverMsgs signs a list of Msgs `msg` with a single `signer`, and delivers it to the chain app
-func (a *PeptideApp) SignAndDeliverMsgs(
-	signer *SignerAccount,
-	msgs ...sdk.Msg,
-) (sdk.Tx, *sdk.Result, *sdk.GasInfo, error) {
-	return a.MultiSignAndDeliverMsgs([]*SignerAccount{signer}, msgs...)
-}
-
-// MultiSignAndDeliverMsgs signs  a list of Msgs `msg` with multiple `signers`, and delivers it to the chain app
-func (a *PeptideApp) MultiSignAndDeliverMsgs(
-	signers []*SignerAccount,
-	msgs ...sdk.Msg,
-) (sdk.Tx, *sdk.Result, *sdk.GasInfo, error) {
-	tx, err := GenTx(a.EncodingConfig.TxConfig, msgs,
-		sdk.Coins{sdk.NewInt64Coin(a.BondDenom, 0)},
-		DefaultGenTxGas,
-		a.ChainId,
-		nil,
-		signers...,
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	gasInfo, result, err := a.SimDeliver(a.EncodingConfig.TxConfig.TxEncoder(), tx)
-	// Increment account sequences regardless of tx execution result to simplify testing In some cases, tx execution may
-	// fail but account sequence is still incremented; while in other cases, account sequence is not incremented when tx fails
-	for _, signer := range signers {
-		signer.SetSequence(signer.GetSequence() + 1)
-		a.AccountKeeper.SetAccount(a.NewUncachedSdkContext(), signer.GenesisAccount)
-	}
-	return tx, result, &gasInfo, err
-}
-
-// Return account from committed state
-func (a *PeptideApp) GetAccount(addr sdk.AccAddress) AccountI {
-	return a.AccountKeeper.GetAccount(a.NewUncachedSdkContext(), addr)
 }
 
 func (a *PeptideApp) ReportMetrics() {

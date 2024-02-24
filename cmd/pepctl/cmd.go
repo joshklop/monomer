@@ -53,10 +53,10 @@ func dbInspectCmd() *cobra.Command {
 		logger.Info("GenesisBlock", "height", genesis.GenesisBlock.Number, "hash", genesis.GenesisBlock.Hash)
 		logger.Info("Genesis L1", "height", genesis.L1.Number, "hash", genesis.L1.Hash)
 
-		logger.Info("App state", "appLastBlockHeight", app.LastBlockHeight(), "ChainId", app.ChainId, "BondDenom", app.BondDenom)
+		logger.Info("App state", "appLastBlockHeight", app.App.LastBlockHeight(), "ChainId", app.ChainId, "BondDenom", app.BondDenom)
 		logger.Info("Block store at app.lastBlockHeight()",
-			"blockExists", bs.BlockByNumber(app.LastBlockHeight()) != nil,
-			"hash", getBlockHash(bs.BlockByNumber(app.LastBlockHeight())),
+			"blockExists", bs.BlockByNumber(app.App.LastBlockHeight()) != nil,
+			"hash", getBlockHash(bs.BlockByNumber(app.App.LastBlockHeight())),
 		)
 		// use RollbackSettings to validate and verify the block store
 		setting := RollbackSettings{
@@ -69,7 +69,7 @@ func dbInspectCmd() *cobra.Command {
 			"latest/unsafe", setting.unsafeHeight,
 			"safe", setting.safeHeight,
 			"finalized", setting.finalizedHeight,
-			"appLastBlockHeight", app.LastBlockHeight(),
+			"appLastBlockHeight", app.App.LastBlockHeight(),
 		)
 		if err := setting.Validate(); err != nil {
 			logger.Error("Stores sanity check", "error", err)
@@ -152,7 +152,7 @@ func dbStoreRollbackCmd() *cobra.Command {
 			"latest/unsafe", setting.unsafeHeight,
 			"safe", setting.safeHeight,
 			"finalized", setting.finalizedHeight,
-			"appLastBlockHeight", app.LastBlockHeight(),
+			"appLastBlockHeight", app.App.LastBlockHeight(),
 		)
 
 		return nil
@@ -289,11 +289,11 @@ func (s RollbackSettings) Validate() error {
 
 // Verify checks if the rollback settings are valid per PeptideApp and BlockStore
 func (s RollbackSettings) Verify(app *peptide.PeptideApp, bs store.BlockStore) error {
-	if *s.height > app.LastBlockHeight() {
-		return fmt.Errorf("rollback height [%d] must be <= app.lastBlockHeight() [%d]", *s.height, app.LastBlockHeight())
+	if *s.height > app.App.LastBlockHeight() {
+		return fmt.Errorf("rollback height [%d] must be <= app.lastBlockHeight() [%d]", *s.height, app.App.LastBlockHeight())
 	}
-	if bs.BlockByNumber(app.LastBlockHeight()) == nil {
-		return fmt.Errorf("app.lastBlockHeight() [%d] does not exist in blockStore", app.LastBlockHeight())
+	if bs.BlockByNumber(app.App.LastBlockHeight()) == nil {
+		return fmt.Errorf("app.lastBlockHeight() [%d] does not exist in blockStore", app.App.LastBlockHeight())
 	}
 	if bs.BlockByNumber(*s.height) == nil {
 		return fmt.Errorf("rollback height [%d] does not exist in blockStore", *s.height)

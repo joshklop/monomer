@@ -296,7 +296,7 @@ func (o *OpNodeMock) GetAccountSequenceNumber(account *peptide.SignerAccount) (u
 		return 0, err
 	}
 	var accountI authtypes.AccountI
-	if err := o.app.InterfaceRegistry().UnpackAny(response.Account, &accountI); err != nil {
+	if err := o.app.App.InterfaceRegistry().UnpackAny(response.Account, &accountI); err != nil {
 		return 0, err
 	}
 	return accountI.GetSequence(), nil

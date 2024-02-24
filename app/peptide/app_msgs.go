@@ -23,7 +23,7 @@ func (a *PeptideApp) RunMsgs(ctx sdk.Context, msgs ...sdk.Msg) (*sdk.Result, err
 	_, _, _ = msgLogs, events, msgResponses
 
 	for i, msg := range msgs {
-		handler := a.MsgServiceRouter().Handler(msg)
+		handler := a.App.MsgServiceRouter().Handler(msg)
 		if handler == nil {
 			return nil, errs.Wrapf(sdkErr.ErrInvalidRequest, "unrecognized %s message type: %T", sdk.MsgTypeURL(msg), msg)
 		}

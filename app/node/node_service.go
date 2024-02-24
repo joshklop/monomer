@@ -12,20 +12,6 @@ import (
 	cometbft_rpc "github.com/polymerdao/monomer/app/node/server/cometbft_rpc"
 )
 
-// RegisterServices registers all services of the node that may be required by various cosmos chain clients
-//
-// Prerequisite: the node and its components must be fully initialized
-func (n *PeptideNode) RegisterServices() {
-	n.registerTxService()
-}
-
-// registerTxService registers the tx service for the node
-func (n *PeptideNode) registerTxService() {
-	tmRpcClient := &tmRpc{server: n.cometServer}
-	client := sdkclient.Context{}.WithClient(tmRpcClient).WithTxConfig(n.chainApp.EncodingConfig.TxConfig)
-	n.chainApp.RegisterTxService(client)
-}
-
 type tmRpc struct {
 	server *cometbft_rpc.CometServer
 }

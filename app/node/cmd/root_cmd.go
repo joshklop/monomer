@@ -27,8 +27,6 @@ func RootCmd() *cobra.Command {
 
 	rootCmd.AddCommand(
 		startCmd(),
-		exportCmd(),
-		genAccountsCmd(),
 		initCmd(),
 		sealCmd(),
 	)
@@ -232,76 +230,5 @@ func startCmd() *cobra.Command {
 	}
 
 	server.AddStartCommandFlags(cmd)
-	return cmd
-}
-
-func exportCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "export",
-		Short: "Export chain app states as JSON",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			config := server.NewConfig(cmd).
-				WithHomeDir().
-				WithOuput().
-				WithDbBackend().
-				WithLogger(server.DefaultLogger())
-
-			defer config.Output.Close()
-			genesis, err := node.PeptideGenesisFromFile(config.HomeDir)
-			if err != nil {
-				return err
-			}
-
-			appdb := server.OpenDB(node.AppStateDbName, config)
-			defer appdb.Close()
-			app := peptide.New(genesis.ChainID, config.HomeDir, appdb, config.Logger)
-
-			appStates := app.ExportGenesis()
-			stateJSON, err := json.MarshalIndent(appStates, "", "  ")
-			if err != nil {
-				return err
-			}
-
-			_, err = config.Output.Write(stateJSON)
-			return err
-		},
-	}
-
-	server.AddExportCommandFlags(cmd)
-	return cmd
-}
-
-func genAccountsCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "gen-accounts",
-		Short: "Generate accounts",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			numAccounts, err := cmd.Flags().GetUint64("num-accounts")
-			if err != nil {
-				return err
-			}
-
-			startingSeqNum, err := cmd.Flags().GetUint64("starting-seq-num")
-			if err != nil {
-				return err
-			}
-
-			app := peptide.New("", "", tmdb.NewMemDB(), server.DefaultLogger())
-			accounts := peptide.NewSignerAccounts(numAccounts, startingSeqNum)
-
-			// accountsJSON, err := json.MarshalIndent(accounts, "", "  ")
-			accountsJSON, err := app.AppCodec().MarshalJSON(accounts[0].PrivKey)
-			if err != nil {
-				return err
-			}
-
-			fmt.Println(string(accountsJSON))
-			return nil
-		},
-	}
-
-	cmd.Flags().Uint64("num-accounts", 5, "Number of accounts to generate")
-	cmd.Flags().Uint64("starting-seq-num", 0, "Starting sequence number")
-
 	return cmd
 }

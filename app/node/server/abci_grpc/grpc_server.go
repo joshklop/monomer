@@ -9,12 +9,7 @@ import (
 	"github.com/cometbft/cometbft/abci/types"
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/service"
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/server/grpc/gogoreflection"
-	reflection "github.com/cosmos/cosmos-sdk/server/grpc/reflection/v2alpha1"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	server "github.com/polymerdao/monomer/app/node/server"
-	"github.com/polymerdao/monomer/app/peptide"
 )
 
 type Endpoint = server.Endpoint
@@ -54,33 +49,6 @@ func NewAbciGRPCServer(protoAddr string, app types.ABCIApplicationServer) servic
 	}
 
 	return NewGRPCServer(protoAddr, "ABCIApplicationServer", register, tmlog.NewTMJSONLogger(tmlog.NewSyncWriter(os.Stdout)))
-}
-
-func NewChainAppGRPCServer(protoAddr string, app *peptide.PeptideApp) service.Service {
-	register := func(s *grpc.Server) error {
-		// Register reflection service on gRPC server.
-		app.RegisterGRPCServer(s)
-		// Reflection allows consumers to build dynamic clients that can write to any
-		// Cosmos SDK application without relying on application packages at compile
-		// time.
-		err := reflection.Register(s, reflection.Config{
-			ChainID:           app.ChainId,
-			SdkConfig:         sdk.GetConfig(),
-			InterfaceRegistry: app.InterfaceRegistry(),
-		})
-		if err != nil {
-			return err
-		}
-		// Reflection allows external clients to see what services and methods
-		// the gRPC server exposes.
-		gogoreflection.Register(s)
-		return nil
-	}
-
-	return NewGRPCServer(
-		protoAddr, "ChainAppServer", register, server.DefaultLogger(),
-		grpc.ForceServerCodec(codec.NewProtoCodec(app.InterfaceRegistry()).GRPCCodec()),
-	)
 }
 
 func (s *GRPCServer) OnStart() error {
