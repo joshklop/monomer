@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
-	rolluptypes "github.com/joshklop/x-rollup/types"
 	"github.com/polymerdao/monomer/app/node/server"
 	cometbft_rpc "github.com/polymerdao/monomer/app/node/server/cometbft_rpc"
 	"github.com/polymerdao/monomer/app/node/server/engine"
@@ -145,7 +144,7 @@ func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive L1 info deposit tx bytes for genesis block: %v", err)
 	}
-	block.L1Txs = []eth.Data{l1TxBytes}
+	block.Txs = []bfttypes.Tx{l1TxBytes}
 
 	genesisHeader := app.Init(genesis.AppState, genesis.InitialHeight, genesis.GenesisTime)
 
@@ -599,8 +598,7 @@ func (cs *PeptideNode) commitBlockAndUpdateNodeInfo() {
 func (cs *PeptideNode) startBuildingBlock() *Block {
 	// fill in block fields with L1 data
 	block := cs.fillBlockWithL1Data(&Block{})
-	cs.applyL1Txs(block)
-	cs.applyBlockL2Txs(block)
+	cs.applyBlockTxs(block)
 	return block
 }
 
@@ -608,7 +606,12 @@ func (cs *PeptideNode) startBuildingBlock() *Block {
 func (cs *PeptideNode) fillBlockWithL1Data(block *Block) *Block {
 	if cs.ps.Current() != nil {
 		// must include L1Txs for L2 block's L1Origin
-		block.L1Txs = cs.ps.Current().Attrs.Transactions
+		txs := cs.ps.Current().Attrs.Transactions
+		flattenedTxs := make([]byte, 0)
+		for _, tx := range txs {
+			flattenedTxs = append(flattenedTxs, tx...)
+		}
+		block.Txs = append(block.Txs, bfttypes.Tx(flattenedTxs))
 		block.Withdrawals = cs.ps.Current().Attrs.Withdrawals
 	} else if cs.engineMode {
 		cs.logger.Error("currentPayload is nil for non-genesis block", "blockHeight", block.Height())
@@ -617,42 +620,9 @@ func (cs *PeptideNode) fillBlockWithL1Data(block *Block) *Block {
 	return block
 }
 
-// applyL1Txs applies L1 txs to the block that's currently being built.
-func (cs *PeptideNode) applyL1Txs(block *Block) {
-	cs.debugL1UserTxs(block.L1Txs, "applyL1Txs.block.L1Txs")
-
-	l1txBytes := make([][]byte, len(block.L1Txs))
-	// TODO: better way to marshal L1 tx bytes?
-	flattenL1txBytes := make([]byte, 0)
-	for i, tx := range block.L1Txs {
-		l1txBytes[i] = tx
-		flattenL1txBytes = append(flattenL1txBytes, l1txBytes[i]...)
-	}
-
-	msg := rolluptypes.NewMsgL1Txs(l1txBytes)
-	result, err := cs.chainApp.RunMsgs(cs.chainApp.NewUncachedSdkContext(), msg)
-	if err != nil {
-		cs.logger.Error("failed to run L1 txs", "err", err)
-		log.Panicf("failed to run L1 txs: %s", err)
-	}
-
-	// convert sdk.Result to abcitypes.TxResult
-	txResult := abcitypes.TxResult{
-		Height: cs.chainApp.App.LastBlockHeight() + 1,
-		Tx:     flattenL1txBytes,
-		Result: abcitypes.ResponseDeliverTx{
-			Log:    result.Log,
-			Data:   result.Data,
-			Events: result.Events,
-		},
-	}
-	cs.txResults = append(cs.txResults, &txResult)
-}
-
-// applyBlockL2Txs applies L2 txs to the block that's currently being built.
-func (cs *PeptideNode) applyBlockL2Txs(block *Block) {
+// applyBlockL2Txs applies txs to the block that's currently being built.
+func (cs *PeptideNode) applyBlockTxs(block *Block) {
 	// TODO: ensure txs size doesn't exceed block size limit
-	blockTxs := make(bfttypes.Txs, 0)
 	for {
 		length, err := cs.txMempool.Len()
 		if err != nil {
@@ -666,20 +636,18 @@ func (cs *PeptideNode) applyBlockL2Txs(block *Block) {
 		if err != nil {
 			panic(fmt.Errorf("dequeue: %v", err))
 		}
-		blockTxs = append(blockTxs, tx)
+		block.Txs = append(block.Txs, tx)
 	}
-	block.Txs = blockTxs
 	cs.deliverTxs(block.Txs)
 }
 
 // indexAndPublishAllTxs indexes all txs in the block that's currently being built.
 // This func should only be run once per block; or earlier tx indices will be overwritten by later txs.
 func (cs *PeptideNode) indexAndPublishAllTxs(block *Block) error {
-	// all L1 txs are flattened to a single txResult returned by chainApp
-	if 1+len(block.Txs) != len(cs.txResults) {
+	if len(block.Txs) != len(cs.txResults) {
 		return fmt.Errorf(
 			"number of txs (%d) in block %d does not match number of txResults (%d)",
-			1+len(block.Txs),
+			len(block.Txs),
 			block.Height(),
 			len(cs.txResults),
 		)

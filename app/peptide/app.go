@@ -378,11 +378,6 @@ func (a *PeptideApp) LastHeader() *tmproto.Header {
 	return a.lastHeader
 }
 
-// Return a Cosmos-SDK context
-func (a *PeptideApp) NewUncachedSdkContext() sdk.Context {
-	return a.App.NewUncachedContext(false, *a.LastHeader())
-}
-
 // Convert a SDK context to Go context
 func (a *PeptideApp) WrapSDKContext(ctx sdk.Context) context.Context {
 	return sdk.WrapSDKContext(ctx)

@@ -78,7 +78,6 @@ type Block struct {
 	Txs             bfttypes.Txs       `json:"txs"`
 	Header          *Header            `json:"header"`
 	ParentBlockHash Hash               `json:"parentHash"`
-	L1Txs           []eth.Data         `json:"l1Txs"`
 	GasLimit        hexutil.Uint64     `json:"gasLimit"`
 	BlockHash       Hash               `json:"hash"`
 	PrevRandao      eth.Bytes32        `json:"prevRandao"`
@@ -137,25 +136,17 @@ func (b *Block) ParentHash() Hash {
 }
 
 func (b *Block) Transactions() (types.Transactions, Hash) {
-	var txs types.Transactions
-	for _, l1tx := range b.L1Txs {
-		var tx types.Transaction
-		if err := tx.UnmarshalBinary(l1tx); err != nil {
-			panic("failed to unmarshal l2 txs")
-		}
-		// TODO add other fields?
-		txs = append(txs, &tx)
-	}
 	chainId, ok := big.NewInt(0).SetString(b.Header.ChainID, 10)
 	if !ok {
 		panic(fmt.Sprintf("block chain id is not an integer %s", b.Header.ChainID))
 	}
 
-	for _, l2tx := range b.Txs {
+	var txs types.Transactions
+	for _, tx := range b.Txs {
 		// TODO: update to use proper Gas and To values if possible
 		txData := &types.DynamicFeeTx{
 			ChainID: chainId,
-			Data:    l2tx,
+			Data:    tx,
 			Gas:     0,
 			Value:   big.NewInt(0),
 			To:      nil,
