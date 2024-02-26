@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/big"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -17,15 +16,12 @@ import (
 	tmdb "github.com/cometbft/cometbft-db"
 	abciclient "github.com/cometbft/cometbft/abci/client"
 	abcitypes "github.com/cometbft/cometbft/abci/types"
-	tmjson "github.com/cometbft/cometbft/libs/json"
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/libs/service"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
-	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	bfttypes "github.com/cometbft/cometbft/types"
-	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum"
@@ -261,17 +257,18 @@ func (cs *PeptideNode) resume() {
 	// in the odd case the app state comes up out of sync with the blockstore, we perform a mini-rollback
 	// to bring them back to the same place. This should never ever happen but when it does (and it did)
 	// it would cause the loop derivation to get stuck
-	if lastBlock.Height() != cs.chainApp.App.LastBlockHeight() {
+	info := cs.chainApp.App.Info(abcitypes.RequestInfo{})
+	if lastBlock.Height() != info.LastBlockHeight {
 		cs.logger.Info("blockstore and appstate out of sync",
 			"last_block_height",
 			lastBlock.Height(),
 			"app_last_height",
-			cs.chainApp.App.LastBlockHeight())
+			info.LastBlockHeight)
 
 		// because the appstate is *always* comitted before the blockstore, the only scenario where there'd be
 		// a mismatch is if the appstate is ahead by 1. Other situation would mean something else is broken
 		// and there's no point in trying to fix it at runtime.
-		if lastBlock.Height()+1 != cs.chainApp.App.LastBlockHeight() {
+		if lastBlock.Height()+1 != info.LastBlockHeight {
 			panic("difference between blockstore and appstate is higher than 1")
 		}
 
@@ -356,7 +353,7 @@ func (cs *PeptideNode) Rollback(head, safe, finalized *eetypes.Block) error {
 	}()
 	cs.logger.Debug("PeptideNode rollback to height [lock]", "rollbackHeight", rollbackHeight, "newHead", head.Height(), "safe", safe.Height(), "finalized", finalized.Height())
 
-	currentHeight := cs.chainApp.App.LastBlockHeight()
+	currentHeight := cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight
 	// first, do all the non-mutating checks and error out if something is not right
 	if safe.Height() > rollbackHeight {
 		return fmt.Errorf(
@@ -588,9 +585,9 @@ func (cs *PeptideNode) commitBlockAndUpdateNodeInfo() {
 
 	// update last nodeInfo
 	cs.lastNodeInfo = cometbft_rpc.NewNodeInfo(
-		cs.chainApp.App.LastCommitID().Hash,
+		cs.chainApp.LastHeader().LastCommitHash,
 		cs.chainApp.LastHeader().AppHash,
-		cs.chainApp.App.LastBlockHeight(),
+		cs.chainApp.LastHeader().Height,
 	)
 }
 
@@ -667,7 +664,7 @@ func (cs *PeptideNode) indexAndPublishAllTxs(block *Block) error {
 }
 
 func (cs *PeptideNode) findParentHash() Hash {
-	lastBlock := cs.bs.BlockByNumber(cs.chainApp.App.LastBlockHeight() - 1)
+	lastBlock := cs.bs.BlockByNumber(cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight - 1)
 	if lastBlock != nil {
 		return lastBlock.Hash()
 	}
@@ -680,7 +677,7 @@ func (cs *PeptideNode) findParentHash() Hash {
 //
 // sealBlock should be called after chainApp's committed. So chainApp.LastBlockHeight is the sealed block's height
 func (cs *PeptideNode) sealBlock(block *Block) *Block {
-	cs.logger.Info("seal block", "height", cs.chainApp.App.LastBlockHeight())
+	cs.logger.Info("seal block", "height", cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight)
 
 	// finalize block fields
 	header := eetypes.Header{}
@@ -720,26 +717,6 @@ type ImportExportResponse struct {
 	height  int64
 }
 
-// ImportState imports the exported state from a file.
-//
-// Call ExportState if you need to persist the current state, since ImportState will reset the chainApp state.
-func (cs *PeptideNode) ImportState(ctx *rpctypes.Context, path string, initHeight int64) (*ImportExportResponse, error) {
-	exportedBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var exportedApp servertypes.ExportedApp
-	tmjson.Unmarshal(exportedBytes, &exportedApp)
-
-	// TODO use the actual state db
-	cs.chainApp = peptide.New(cs.chainApp.ChainId, "", tmdb.NewMemDB(), cs.logger)
-	cs.resetClient()
-
-	cs.chainApp.ImportAppStateAndValidators(&exportedApp)
-	cs.commitBlockAndUpdateNodeInfo()
-	return &ImportExportResponse{success: true, path: path, height: cs.chainApp.App.LastBlockHeight() + 1}, nil
-}
-
 // resetClient creates a new client and stops the old one.
 func (cs *PeptideNode) resetClient() {
 	if cs.client != nil && cs.client.IsRunning() {
@@ -753,7 +730,7 @@ func (cs *PeptideNode) resetClient() {
 	cs.earliestNodeInfo = cometbft_rpc.NewNodeInfo(
 		cs.latestBlock.Hash().Bytes(),
 		cs.chainApp.LastHeader().AppHash,
-		cs.chainApp.App.LastBlockHeight(),
+		cs.latestBlock.Height(),
 	)
 	cs.lastNodeInfo = cs.earliestNodeInfo
 }
@@ -772,7 +749,7 @@ func (cs *PeptideNode) debugL1UserTxs(txs []hexutil.Bytes, source string) {
 
 // LastBlockHeight returns the last committed block height.
 func (cs *PeptideNode) LastBlockHeight() int64 {
-	return cs.chainApp.App.LastBlockHeight()
+	return cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight
 }
 
 // SavePayload saves the payload by its ID if it's not already in payload cache.

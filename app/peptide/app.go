@@ -10,25 +10,24 @@ import (
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	tmtypes "github.com/cometbft/cometbft/types"
-	"github.com/cosmos/cosmos-sdk/baseapp"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	teststaking "github.com/cosmos/cosmos-sdk/x/staking/testutil"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/joshklop/gm-monomer/app"
 	"github.com/joshklop/gm-monomer/app/params"
 	"github.com/samber/lo"
 )
 
+type Application interface {
+	abci.Application
+	RollbackToHeight(uint64) error
+}
+
 // PeptideApp extends the ABCI-compatible App with additional op-stack L2 chain features
 type PeptideApp struct {
 	// App is the ABCI-compatible App
 	// TODO: IMPORT YOUR ABCI APP HERE
-	App *app.App
+	App Application
 
 	ValSet               *tmtypes.ValidatorSet
 	EncodingConfig       *params.EncodingConfig
@@ -85,42 +84,26 @@ type PeptideAppOptions struct {
 	IAVLLazyLoading     bool
 }
 
-func New(chainID string, dir string, db tmdb.DB, logger tmlog.Logger) *PeptideApp {
+func New(chainID string, dir string, db tmdb.DB, app Application, logger tmlog.Logger) *PeptideApp {
 	return NewWithOptions(PeptideAppOptions{
 		ChainID:  chainID,
 		HomePath: dir,
 		DB:       db,
-	}, logger)
+	}, app, logger)
 }
 
 // New creates application instance with in-memory database and disabled logging.
-func NewWithOptions(options PeptideAppOptions, logger tmlog.Logger) *PeptideApp {
+func NewWithOptions(options PeptideAppOptions, app Application, logger tmlog.Logger) *PeptideApp {
 	logger.Info("new app with options",
 		"chain_id", options.ChainID,
 		"home_path", options.HomePath,
 		"iavl_lazy_loading", options.IAVLLazyLoading,
 		"iavl_disable_fast_node", options.IAVLDisableFastNode,
 	)
-	encoding := app.MakeEncodingConfig()
-	mainApp := app.New(
-		logger,
-		options.DB,
-		nil,
-		true,
-		map[int64]bool{},
-		options.HomePath,
-		0,
-		encoding,
-		simtestutil.EmptyAppOptions{},
-		baseapp.SetChainID(options.ChainID),
-		baseapp.SetIAVLDisableFastNode(options.IAVLDisableFastNode),
-		baseapp.SetIAVLLazyLoading(options.IAVLLazyLoading),
-	)
 
 	newPeptideApp := &PeptideApp{
-		App:                  mainApp,
+		App:                  app,
 		ValSet:               &tmtypes.ValidatorSet{},
-		EncodingConfig:       &encoding,
 		ChainId:              options.ChainID,
 		BondDenom:            sdk.DefaultBondDenom,
 		VotingPowerReduction: sdk.DefaultPowerReduction,
@@ -143,11 +126,6 @@ func (a *PeptideApp) ImportAppStateAndValidators(
 	a.ValSet = tmtypes.NewValidatorSet(tmValidators)
 	// set consensusParam?
 	return resp
-}
-
-func (a *PeptideApp) InitChainWithEmptyGenesis() abci.ResponseInitChain {
-	genState := a.SimpleGenesis(NewValidatorSignerAccounts(1, 0), NewValidatorSignerAccounts(1, 0))
-	return a.InitChainWithGenesisState(genState)
 }
 
 func (a *PeptideApp) InitChainWithGenesisState(state app.GenesisState) abci.ResponseInitChain {
@@ -193,7 +171,7 @@ func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time
 
 	// use LastBlockHeight() since it might not be the same as InitialHeight.
 	return &tmproto.Header{
-		Height:             a.App.LastBlockHeight(),
+		Height:             a.App.Info(abci.RequestInfo{}).LastBlockHeight,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
@@ -202,38 +180,15 @@ func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time
 	}
 }
 
-// TODO get rid of all this nonsense
-func (a *PeptideApp) initValSetFromGenesis(genesisStateBytes []byte) error {
-	var genesisState app.GenesisState
-	if err := json.Unmarshal(genesisStateBytes, &genesisState); err != nil {
-		return err
-	}
-
-	var stakingGenesis stakingtypes.GenesisState
-	a.App.AppCodec().MustUnmarshalJSON(genesisState[stakingtypes.ModuleName], &stakingGenesis)
-
-	valset, err := teststaking.ToTmValidators(stakingGenesis.Validators, a.VotingPowerReduction)
-	if err != nil {
-		return err
-	}
-
-	a.ValSet = tmtypes.NewValidatorSet(valset)
-	return nil
-}
-
 // Resume the normal activity after a (chain) restart. It sets the required pointers according to the
 // last known header (that comes from the block store) and calls into the base app's BeginBlock()
 func (a *PeptideApp) Resume(lastHeader *tmproto.Header, genesisState []byte) error {
 	a.lastHeader = lastHeader
 	a.currentHeader = &tmproto.Header{
-		Height:             a.App.LastBlockHeight() + 1,
+		Height:             a.App.Info(abci.RequestInfo{}).LastBlockHeight + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
-	}
-
-	if err := a.initValSetFromGenesis(genesisState); err != nil {
-		return err
 	}
 
 	a.App.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
@@ -243,101 +198,7 @@ func (a *PeptideApp) Resume(lastHeader *tmproto.Header, genesisState []byte) err
 // Rolls back the app state (i.e. commit multi store from the base app) to the specified height (version)
 // If successful, the latest committed version is that of "height"
 func (a *PeptideApp) RollbackToHeight(height int64) error {
-	cms := a.App.CommitMultiStore()
-	return cms.RollbackToVersion(height)
-}
-
-// DefaultGenesis create a default GenesisState, which is a map
-// with module name as keys and JSON-marshaled genesisState per module as values
-func (a *PeptideApp) DefaultGenesis() app.GenesisState {
-	return app.NewDefaultGenesisState(a.App.AppCodec())
-}
-
-// SimpleGenesis creates a genesis with given genesis accounts `genAccs` and one derived validator.
-// The first genesis account is used for delegation with bond amount of 1 voting power.
-//
-// `balances` should include staking tokens for all transactor accounts in `genAccs`.
-// If left empty, `a.VotingPowerReduction` ie. 1 voting power worth staking tokens will be added for each account.
-//
-// Validators are saved in `a.ValSet` for block production later.
-func (a *PeptideApp) SimpleGenesis(
-	genAccs SignerAccounts,
-	valAccs SignerAccounts,
-	balances ...banktypes.Balance,
-) app.GenesisState {
-	if len(balances) == 0 {
-		balances = genAccs.NewBalances(a.BondDenom, a.VotingPowerReduction)
-	}
-	genesisState := a.MultiDelegationGenesis(
-		genAccs.GetGenesisAccounts(),
-		balances,
-		genAccs,
-		valAccs,
-		ValidatorSetDelegation{{{0, a.VotingPowerReduction}}},
-	)
-	return genesisState
-}
-
-// MultiDelegationGenesis creates a genesis with given genesis accounts `genAccs` and validators,
-// and delegations.
-// Each validator must be delegated with staking tokens ≥ 1 voting power, ie. a.ReductionVotingPower x 1.
-// `delegations` must be the same length as `validators`, where its index is for validators.
-func (a *PeptideApp) MultiDelegationGenesis(
-	genAccs []GenesisAccount,
-	balances []banktypes.Balance,
-	delegators SignerAccounts,
-	validators SignerAccounts,
-	delegations ValidatorSetDelegation,
-) app.GenesisState {
-	genesisState := a.DefaultGenesis()
-	//
-	// set x/auth genesis
-	//
-	authGenesis := authtypes.NewGenesisState(authtypes.DefaultParams(), genAccs)
-	genesisState[authtypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(authGenesis)
-
-	stakingValidators, stakingDelegations, totalValidatorSetBond := newStakingValidators(
-		validators, delegators, delegations,
-	)
-
-	// bond pool holds all the bonded staking tokens
-	bondPoolBalance := banktypes.Balance{
-		Address: authtypes.NewModuleAddress(stakingtypes.BondedPoolName).String(),
-		Coins: sdk.Coins{
-			sdk.NewCoin(a.BondDenom, totalValidatorSetBond),
-		},
-	}
-
-	totalBalances := append(balances, bondPoolBalance)
-	// update total supply
-	totalSupply := sdk.NewCoins()
-	for _, b := range totalBalances {
-		totalSupply = totalSupply.Add(b.Coins...)
-	}
-
-	//
-	// set x/staking genesis
-	//
-	stakingGenesis := stakingtypes.NewGenesisState(stakingtypes.DefaultParams(), stakingValidators, stakingDelegations)
-	genesisState[stakingtypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(stakingGenesis)
-
-	//
-	// set x/bank genesis
-	//
-	bankGenesis := banktypes.NewGenesisState(
-		banktypes.DefaultGenesisState().Params,
-		totalBalances,
-		totalSupply,
-		[]banktypes.Metadata{},
-		[]banktypes.SendEnabled{},
-	)
-	genesisState[banktypes.ModuleName] = a.App.AppCodec().MustMarshalJSON(bankGenesis)
-
-	// Set app validators for block production
-	a.ValSet = tmtypes.NewValidatorSet(
-		lo.Must(teststaking.ToTmValidators(stakingValidators, a.VotingPowerReduction)),
-	)
-	return genesisState
+	return a.App.RollbackToHeight(uint64(height))
 }
 
 // Commit pending changes to chain state and start a new block.
@@ -355,12 +216,13 @@ func (a *PeptideApp) OnCommit(timestamp eth.Uint64Quantity) {
 	// update last header to the committed time and app hash
 	lastHeader := a.currentHeader
 	lastHeader.Time = time.Unix(int64(timestamp), 0)
-	lastHeader.AppHash = a.App.LastCommitID().Hash
+	info := a.App.Info(abci.RequestInfo{})
+	lastHeader.AppHash = info.LastBlockAppHash
 	a.lastHeader = lastHeader
 
 	// start a new partial header for next round
 	a.currentHeader = &tmproto.Header{
-		Height:             a.App.LastBlockHeight() + 1,
+		Height:             info.LastBlockHeight + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
 		ChainID:            a.ChainId,
