@@ -24,10 +24,10 @@ type EthAPI struct {
 	blockStore store.BlockStoreReader
 	logger     server.Logger
 	register   WeiRegister
-	chainID    string
+	chainID    *hexutil.Big
 }
 
-func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID string, logger server.Logger) *EthAPI {
+func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID *hexutil.Big, logger server.Logger) *EthAPI {
 	return &EthAPI{
 		blockStore: blockStore,
 		register:   register,
@@ -36,6 +36,9 @@ func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID 
 	}
 }
 
+// TODO the block store should only query the canonical chain.
+// Right now it does not.
+
 func (e *EthAPI) GetProof(address common.Address, storage []eetypes.Hash, blockTag string) (*eth.AccountResult, error) {
 	e.logger.Debug("GetProof", "address", address, "storage", storage, "blockTag", blockTag)
 	telemetry.IncrCounter(1, "query", "GetProof")
@@ -43,21 +46,15 @@ func (e *EthAPI) GetProof(address common.Address, storage []eetypes.Hash, blockT
 	return &eth.AccountResult{}, nil
 }
 
-func (e *EthAPI) ChainId() hexutil.Big {
-	e.logger.Debug("ChainId")
-	telemetry.IncrCounter(1, "query", "ChainId")
-
-	chainID, ok := new(big.Int).SetString(e.chainID, 10)
-	if !ok {
-		panic("chain id is not numerical")
-	}
-	return (hexutil.Big)(*chainID)
+func (e *EthAPI) ChainId() *hexutil.Big {
+	return e.chainID
 }
 
 // GetBalance returns wrapped Ethers balance on L2 chain
 // - address: EVM address
 // - blockNumber: a valid BlockLabel or hex encoded big.Int; default to latest/unsafe block
 func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error) {
+	// TODO: why do we need this function? It would be nice if we don't need it. We could remove the register and references to the app in the EthAPI.
 	e.logger.Debug("GetBalance", "address", address, "id", id)
 	telemetry.IncrCounter(1, "query", "GetBalance")
 
@@ -106,6 +103,8 @@ func (e *EthAPI) blockByID(id any) *eetypes.Block {
 	switch idT := id.(type) {
 	case nil:
 		return e.blockStore.BlockByLabel(eth.Unsafe)
+	case int:
+		return e.blockStore.BlockByNumber(int64(idT))
 	case int64:
 		return e.blockStore.BlockByNumber(idT)
 	case eth.BlockLabel:
