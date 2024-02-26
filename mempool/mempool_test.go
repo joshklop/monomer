@@ -3,8 +3,8 @@ package mempool_test
 import (
 	"testing"
 
-	comettypes "github.com/cometbft/cometbft/types"
 	dbm "github.com/cometbft/cometbft-db"
+	comettypes "github.com/cometbft/cometbft/types"
 	"github.com/polymerdao/monomer/mempool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

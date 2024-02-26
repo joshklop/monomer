@@ -34,17 +34,17 @@ type Node interface {
 }
 
 type EngineAPI struct {
-	node   Node
+	node         Node
 	payloadStore payloadstore.PayloadStore
-	logger server.Logger
-	lock   sync.RWMutex
+	logger       server.Logger
+	lock         sync.RWMutex
 }
 
 func NewEngineAPI(node Node, payloadStore payloadstore.PayloadStore, logger server.Logger) *EngineAPI {
 	return &EngineAPI{
-		node: node,
+		node:         node,
 		payloadStore: payloadStore,
-		logger: logger,
+		logger:       logger,
 	}
 }
 

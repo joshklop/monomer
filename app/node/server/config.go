@@ -35,8 +35,8 @@ func EnableAllApis() ApiEnabledMask {
 }
 
 const (
-	// PeptideApiEnabled = 1 << 1
-	// EthApiEnabled = 1 << 2
+// PeptideApiEnabled = 1 << 1
+// EthApiEnabled = 1 << 2
 )
 
 const (

@@ -103,7 +103,6 @@ func NewPeptideNode(
 	return node
 }
 
-
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
 func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, logger server.Logger) []ethrpc.API {
