@@ -109,13 +109,13 @@ func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, 
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
-			Service:   engine.NewEngineAPI(p, p.ps, logger.With("module", "engine")),
+			Service:   engine.NewEngineAPI(p, p.bs, p.ps, logger.With("module", "engine")),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p, p, p.chainApp.ChainId, logger.With("module", "eth")),
+			Service:   engine.NewEthAPI(p.bs, p, p.chainApp.ChainId, logger.With("module", "eth")),
 		}, {
 			Namespace: "pep",
-			Service:   engine.NewPeptideAPI(p, logger.With("module", "peptide")),
+			Service:   engine.NewPeptideAPI(p.bs, logger.With("module", "peptide")),
 		},
 	}
 }

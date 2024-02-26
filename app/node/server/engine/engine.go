@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -12,15 +13,10 @@ import (
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
+	"github.com/polymerdao/monomer/app/peptide/store"
 )
 
-type BlockStore interface {
-	GetBlock(id any) (*eetypes.Block, error)
-}
-
 type Node interface {
-	BlockStore
-
 	LastBlockHeight() int64
 	// SavePayload saves the payload by its ID if it's not already in payload cache.
 	// Also update the latest Payload if this is a new payload
@@ -35,14 +31,16 @@ type Node interface {
 
 type EngineAPI struct {
 	node         Node
+	blockStore   store.BlockStoreReader
 	payloadStore payloadstore.PayloadStore
 	logger       server.Logger
 	lock         sync.RWMutex
 }
 
-func NewEngineAPI(node Node, payloadStore payloadstore.PayloadStore, logger server.Logger) *EngineAPI {
+func NewEngineAPI(node Node, blockStore store.BlockStoreReader, payloadStore payloadstore.PayloadStore, logger server.Logger) *EngineAPI {
 	return &EngineAPI{
 		node:         node,
+		blockStore:   blockStore,
 		payloadStore: payloadStore,
 		logger:       logger,
 	}
@@ -51,20 +49,14 @@ func NewEngineAPI(node Node, payloadStore payloadstore.PayloadStore, logger serv
 func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash eetypes.Hash) error {
 	e.logger.Debug("engineAPIserver.rollback", "head", head.Height(), "safe", safeHash, "finalized", finalizedHash)
 
-	getId := func(label string, hash eetypes.Hash) any {
+	getBlock := func(label eth.BlockLabel, hash eetypes.Hash) *eetypes.Block {
 		if hash != eetypes.ZeroHash {
-			return hash.Bytes()
+			return e.blockStore.BlockByHash(hash)
 		}
-		return label
+		return e.blockStore.BlockByLabel(label)
 	}
-	safe, err := e.node.GetBlock(getId(eth.Safe, safeHash))
-	if err != nil {
-		return err
-	}
-	finalized, err := e.node.GetBlock(getId(eth.Finalized, finalizedHash))
-	if err != nil {
-		return err
-	}
+	safe := getBlock(eth.Safe, safeHash)
+	finalized := getBlock(eth.Finalized, finalizedHash)
 	return e.node.Rollback(head, safe, finalized)
 }
 
@@ -98,10 +90,10 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	headBlock, err := e.node.GetBlock(fcs.HeadBlockHash.Bytes())
-	if err != nil {
-		e.logger.Error("failed to get headBlock", "headBlockHash", fcs.HeadBlockHash.Hex(), "err", err)
-		return nil, engine.InvalidForkChoiceState.With(err)
+	headBlock := e.blockStore.BlockByHash(fcs.HeadBlockHash)
+	if headBlock == nil {
+		e.logger.Error("failed to get headBlock", "headBlockHash", fcs.HeadBlockHash.Hex())
+		return nil, engine.InvalidForkChoiceState.With(errors.New("head block not found"))
 	}
 
 	e.logger.Debug("ForkchoiceUpdatedV3",
@@ -248,10 +240,9 @@ func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStat
 
 	e.logger.Debug("NewPayloadV3", "payload.ID", payload.ID(), "blockHash", payload.BlockHash.Hex(), "height", e.node.LastBlockHeight()+1)
 
-	if _, err := e.node.GetBlock(payload.BlockHash.Bytes()); err != nil {
-		e.logger.Error("Engine.NewPayload: failed to get block", "blockHash", payload.BlockHash.Hex(), "err", err)
-		return &eth.PayloadStatusV1{Status: eth.ExecutionInvalidBlockHash},
-			engine.InvalidParams.With(err)
+	if e.blockStore.BlockByHash(payload.BlockHash) == nil {
+		e.logger.Error("Engine.NewPayload: failed to get block", "blockHash", payload.BlockHash.Hex())
+		return &eth.PayloadStatusV1{Status: eth.ExecutionInvalidBlockHash}, engine.InvalidParams.With(errors.New("block not found"))
 	}
 	headBlockHash := e.node.HeadBlockHash()
 	return &eth.PayloadStatusV1{

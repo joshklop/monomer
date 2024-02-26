@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
+	"github.com/polymerdao/monomer/app/peptide/store"
 )
 
 type WeiRegister interface {
@@ -19,13 +21,13 @@ type WeiRegister interface {
 }
 
 type EthAPI struct {
-	blockStore BlockStore
+	blockStore store.BlockStoreReader
 	logger     server.Logger
 	register   WeiRegister
 	chainID    string
 }
 
-func NewEthAPI(blockStore BlockStore, register WeiRegister, chainID string, logger server.Logger) *EthAPI {
+func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID string, logger server.Logger) *EthAPI {
 	return &EthAPI{
 		blockStore: blockStore,
 		register:   register,
@@ -59,9 +61,10 @@ func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error)
 	e.logger.Debug("GetBalance", "address", address, "id", id)
 	telemetry.IncrCounter(1, "query", "GetBalance")
 
-	b, err := e.blockStore.GetBlock(id)
-	if err != nil {
-		return hexutil.Big{}, err
+	b := e.blockByID(id)
+	if b == nil {
+		e.logger.Debug("GetBlockByNumber", "id", id, "found", false)
+		return hexutil.Big{}, errors.New("block not found")
 	}
 
 	balance, err := e.register.Balance(address, b.Height())
@@ -76,9 +79,9 @@ func (e *EthAPI) GetBlockByHash(hash eetypes.Hash, inclTx bool) (map[string]any,
 	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
 	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
-	b, err := e.blockStore.GetBlock(hash.Bytes())
-	if err != nil {
-		return nil, err
+	b := e.blockStore.BlockByHash(hash)
+	if b == nil {
+		return nil, errors.New("block not found")
 	}
 	return b.ToEthLikeBlock(inclTx), nil
 }
@@ -86,14 +89,27 @@ func (e *EthAPI) GetBlockByHash(hash eetypes.Hash, inclTx bool) (map[string]any,
 func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
 	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
-	b, err := e.blockStore.GetBlock(id)
+	b := e.blockByID(id)
 	// OpNode needs a NotFound error to trigger Engine reset
-	if err != nil || b == nil {
+	if b == nil {
 		e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", false)
 		// non-nil err translates to a TempErr in OpNode;
 		// What we need is a nil err/block, which translates to a NotFound error in OpNode
+		// TODO?
 		return nil, nil
 	}
 	e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", true)
 	return b.ToEthLikeBlock(inclTx), nil
+}
+
+func (e *EthAPI) blockByID(id any) *eetypes.Block {
+	switch idT := id.(type) {
+	case nil:
+		return e.blockStore.BlockByLabel(eth.Unsafe)
+	case int64:
+		return e.blockStore.BlockByNumber(idT)
+	case eth.BlockLabel:
+		return e.blockStore.BlockByLabel(idT)
+	}
+	return nil
 }
