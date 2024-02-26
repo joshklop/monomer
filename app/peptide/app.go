@@ -25,8 +25,6 @@ type Application interface {
 
 // PeptideApp extends the ABCI-compatible App with additional op-stack L2 chain features
 type PeptideApp struct {
-	// App is the ABCI-compatible App
-	// TODO: IMPORT YOUR ABCI APP HERE
 	App Application
 
 	ValSet               *tmtypes.ValidatorSet
