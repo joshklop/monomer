@@ -112,7 +112,7 @@ func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, 
 			Service:   engine.NewEngineAPI(p, p.ps, logger.With("module", "engine")),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p, p.chainApp.ChainId, logger.With("module", "eth")),
+			Service:   engine.NewEthAPI(p, p, p.chainApp.ChainId, logger.With("module", "eth")),
 		}, {
 			Namespace: "pep",
 			Service:   engine.NewPeptideAPI(p, logger.With("module", "peptide")),
@@ -803,7 +803,7 @@ func (cs *PeptideNode) HeadBlockHash() Hash {
 }
 
 // GetETH returns the wrapped ETH balance in Wei of the given EVM address.
-func (cs *PeptideNode) GetETH(evmAddr common.Address, height int64) (*big.Int, error) {
+func (cs *PeptideNode) Balance(evmAddr common.Address, height int64) (*big.Int, error) {
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
 	cosmAddr := peptidecommon.EvmToCosmos(evmAddr)

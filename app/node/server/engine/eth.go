@@ -25,9 +25,10 @@ type EthAPI struct {
 	chainID    string
 }
 
-func NewEthAPI(blockStore BlockStore, chainID string, logger server.Logger) *EthAPI {
+func NewEthAPI(blockStore BlockStore, register WeiRegister, chainID string, logger server.Logger) *EthAPI {
 	return &EthAPI{
 		blockStore: blockStore,
+		register:   register,
 		chainID:    chainID,
 		logger:     logger,
 	}

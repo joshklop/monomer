@@ -8,7 +8,21 @@ import (
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 )
 
-type BlockStore interface {
+type BlockStoreReader interface {
+	// Retrieves a block from the store by its hash and returns it. It uses the user-provided BlockUnmarshaler
+	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
+	BlockByHash(hash eetypes.Hash) eetypes.BlockData
+
+	// Retrieves a block from the store by its height and returns it. It uses the user-provided BlockUnmarshaler
+	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
+	BlockByNumber(height int64) eetypes.BlockData
+
+	// Retrieves a block from the store by its label and returns it. It uses the user-provided BlockUnmarshaler
+	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
+	BlockByLabel(label eth.BlockLabel) eetypes.BlockData
+}
+
+type BlockStoreWriter interface {
 	// Adds a new block to the store
 	//
 	// NOTE: no block by label is updated. We have to call UpdateLabel to update labels explicitly including "unsafe"
@@ -22,24 +36,17 @@ type BlockStore interface {
 	// Returns error in case the block is not found
 	UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error
 
-	// Retrieves a block from the store by its hash and returns it. It uses the user-provided BlockUnmarshaler
-	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByHash(hash eetypes.Hash) eetypes.BlockData
-
-	// Retrieves a block from the store by its height and returns it. It uses the user-provided BlockUnmarshaler
-	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByNumber(height int64) eetypes.BlockData
-
-	// Retrieves a block from the store by its label and returns it. It uses the user-provided BlockUnmarshaler
-	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByLabel(label eth.BlockLabel) eetypes.BlockData
-
 	// Removes all blocks up to (not including) height. Note that updating any label that may go stale
 	// is up to the caller
 	RollbackToHeight(height int64) error
 
 	// TODO might need a new method to handle re-org cases. we could do it when the finalised label is applied
 	//      but having an explicit method for it could be better?
+}
+
+type BlockStore interface {
+	BlockStoreReader
+	BlockStoreWriter
 }
 
 // We hide the block marshaling behind this function so the store does not need to know
