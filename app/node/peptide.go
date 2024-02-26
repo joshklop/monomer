@@ -94,13 +94,38 @@ func NewPeptideNode(
 	)
 
 	config := rpcee.DefaultConfig(eeEndpoint.Host)
-	eeServer := rpcee.NewEeRpcServer(config, engine.GetExecutionEngineAPIs(node, enabledApis, logger), logger)
+	eeServer := rpcee.NewEeRpcServer(config, node.getExecutionEngineAPIs(enabledApis, logger), logger)
 
 	node.cometServer = cometServer
 	node.cometRpcServer = cometRpcServer
 	node.eeServer = eeServer
 	node.nodeServices = server.NewCompositeService(node, cometRpcServer, eeServer)
 	return node
+}
+
+
+// The public rpc methods are prefixed by the namespace (lower case) followed by all exported
+// methods of the "service" in camelcase
+func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, logger server.Logger) []ethrpc.API {
+	apis := []ethrpc.API{
+		{
+			Namespace: "engine",
+			Service:   engine.NewEngineAPI(p, p.ps, logger.With("module", "engine")),
+		}, {
+			Namespace: "eth",
+			Service:   engine.NewEthAPI(p, p.chainApp.ChainId, logger.With("module", "eth")),
+		}, {
+			Namespace: "pep",
+			Service:   engine.NewPeptideAPI(p, logger.With("module", "peptide")),
+		},
+	}
+	if enabledApis.IsAdminApiEnabled() {
+		apis = append(apis, ethrpc.API{
+			Namespace: "admin",
+			Service:   engine.NewAdminAPI(p, logger),
+		})
+	}
+	return apis
 }
 
 func NewPeptideNodeFromConfig(

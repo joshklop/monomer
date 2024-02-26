@@ -14,9 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
+	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 )
 
 type (
@@ -28,9 +28,6 @@ type Node interface {
 	LastBlockHeight() int64
 	// SavePayload saves the payload by its ID if it's not already in payload cache.
 	// Also update the latest Payload if this is a new payload
-	SavePayload(payload *eetypes.Payload)
-	GetPayload(payloadID eetypes.PayloadID) (*eetypes.Payload, bool)
-	CurrentPayload() *eetypes.Payload
 	// The latest unsafe block hash
 	//
 	// The latest unsafe block refers to sealed blocks, not the one that's being built on
@@ -38,7 +35,6 @@ type Node interface {
 	CommitBlock() error
 	// GetETH returns the wrapped ETH balance in Wei of the given EVM address.
 	GetETH(address common.Address, height int64) (*big.Int, error)
-	GetChainID() string
 
 	GetBlock(id any) (*Block, error)
 	UpdateLabel(label eth.BlockLabel, hash Hash) error
@@ -46,37 +42,22 @@ type Node interface {
 	Rollback(head, safe, finalized *Block) error
 }
 
-// The public rpc methods are prefixed by the namespace (lower case) followed by all exported
-// methods of the "service" in camelcase
-func GetExecutionEngineAPIs(node Node, enabledApis server.ApiEnabledMask, logger server.Logger) []rpc.API {
-	apis := []rpc.API{
-		{
-			Namespace: "engine",
-			Service:   &engineAPIserver{node: node, logger: logger.With("module", "engine")},
-		}, {
-			Namespace: "eth",
-			Service:   &ethLikeServer{node: node, logger: logger.With("module", "eth")},
-		}, {
-			Namespace: "pep",
-			Service:   &peptideServer{node: node, logger: logger.With("module", "peptide")},
-		},
-	}
-	if enabledApis.IsAdminApiEnabled() {
-		apis = append(apis, rpc.API{
-			Namespace: "admin",
-			Service:   &adminServer{node: node, logger: logger},
-		})
-	}
-	return apis
-}
-
-type engineAPIserver struct {
+type EngineAPI struct {
 	node   Node
+	payloadStore payloadstore.PayloadStore
 	logger server.Logger
 	lock   sync.RWMutex
 }
 
-func (e *engineAPIserver) rollback(head *Block, safeHash, finalizedHash eetypes.Hash) error {
+func NewEngineAPI(node Node, payloadStore payloadstore.PayloadStore, logger server.Logger) *EngineAPI {
+	return &EngineAPI{
+		node: node,
+		payloadStore: payloadStore,
+		logger: logger,
+	}
+}
+
+func (e *EngineAPI) rollback(head *Block, safeHash, finalizedHash eetypes.Hash) error {
 	e.logger.Debug("engineAPIserver.rollback", "head", head.Height(), "safe", safeHash, "finalized", finalizedHash)
 
 	getId := func(label string, hash eetypes.Hash) any {
@@ -96,7 +77,7 @@ func (e *engineAPIserver) rollback(head *Block, safeHash, finalizedHash eetypes.
 	return e.node.Rollback(head, safe, finalized)
 }
 
-func (e *engineAPIserver) ForkchoiceUpdatedV1(
+func (e *EngineAPI) ForkchoiceUpdatedV1(
 	fcs eth.ForkchoiceState,
 	pa eth.PayloadAttributes,
 ) (*eth.ForkchoiceUpdatedResult, error) {
@@ -104,7 +85,7 @@ func (e *engineAPIserver) ForkchoiceUpdatedV1(
 	return e.ForkchoiceUpdatedV3(fcs, pa)
 }
 
-func (e *engineAPIserver) ForkchoiceUpdatedV2(
+func (e *EngineAPI) ForkchoiceUpdatedV2(
 	fcs eth.ForkchoiceState,
 	pa eth.PayloadAttributes,
 ) (*eth.ForkchoiceUpdatedResult, error) {
@@ -112,7 +93,7 @@ func (e *engineAPIserver) ForkchoiceUpdatedV2(
 	return e.ForkchoiceUpdatedV3(fcs, pa)
 }
 
-func (e *engineAPIserver) ForkchoiceUpdatedV3(
+func (e *EngineAPI) ForkchoiceUpdatedV3(
 	fcs eth.ForkchoiceState,
 	pa eth.PayloadAttributes,
 ) (*eth.ForkchoiceUpdatedResult, error) {
@@ -187,7 +168,7 @@ func (e *engineAPIserver) ForkchoiceUpdatedV3(
 			return nil, engine.InvalidPayloadAttributes.With(err)
 		}
 		// TODO: handle error of SavePayload
-		e.node.SavePayload(payload)
+		e.payloadStore.Add(payload)
 		e.logger.Info("engine reorg payload", "payload_id", payloadId, "payload_head_block_hash", fcs.HeadBlockHash, "store_head_block_hash", e.node.HeadBlockHash())
 		// TODO: use one method for both cases: payload.Valid()
 		return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, payloadId), nil
@@ -201,7 +182,7 @@ func (e *engineAPIserver) ForkchoiceUpdatedV3(
 		if err != nil {
 			return nil, engine.InvalidPayloadAttributes.With(err)
 		}
-		e.node.SavePayload(payload)
+		e.payloadStore.Get(*payloadId)
 		e.logger.Info("engine saving new payload", "payload_id", payloadId, "payload_head_block_hash", fcs.HeadBlockHash, "store_head_block_hash", e.node.HeadBlockHash(), "headBlockHeight", headBlock.Height())
 		return payload.Valid(payloadId), nil
 	}
@@ -212,18 +193,18 @@ func (e *engineAPIserver) ForkchoiceUpdatedV3(
 	return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, nil), nil
 }
 
-func (e *engineAPIserver) GetPayloadV1(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV1(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	e.logger.Debug("GetPayloadV1", "payload_id", payloadID)
 	return e.GetPayloadV3(payloadID)
 }
 
-func (e *engineAPIserver) GetPayloadV2(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV2(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	e.logger.Debug("GetPayloadV2", "payload_id", payloadID)
 	return e.GetPayloadV3(payloadID)
 }
 
 // OpNode sequencer calls this API to seal a new block
-func (e *engineAPIserver) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 
@@ -232,11 +213,11 @@ func (e *engineAPIserver) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.Execut
 
 	defer telemetry.IncrCounter(1, "query", "GetPayload")
 
-	payload, ok := e.node.GetPayload(payloadID)
+	payload, ok := e.payloadStore.Get(payloadID)
 	if !ok {
 		return nil, eetypes.UnknownPayload
 	}
-	if payload != e.node.CurrentPayload() {
+	if payload != e.payloadStore.Current() {
 		e.logger.Error("payload is not current", "payload_id", payloadID, "newBlockHeight", newBlockHeight)
 		return nil, engine.InvalidParams.With(fmt.Errorf("payload is not current"))
 	}
@@ -258,17 +239,17 @@ func (e *engineAPIserver) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.Execut
 	return payload.ToExecutionPayloadEnvelope(e.node.HeadBlockHash()), nil
 }
 
-func (e *engineAPIserver) NewPayloadV1(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
+func (e *EngineAPI) NewPayloadV1(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
 	e.logger.Debug("trying: NewPayloadV1", "payload.ID", payload.ID(), "blockHash", payload.BlockHash.Hex(), "height", e.node.LastBlockHeight()+1)
 	return e.NewPayloadV3(payload)
 }
 
-func (e *engineAPIserver) NewPayloadV2(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
+func (e *EngineAPI) NewPayloadV2(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
 	e.logger.Debug("trying: NewPayloadV2", "payload.ID", payload.ID(), "blockHash", payload.BlockHash.Hex(), "height", e.node.LastBlockHeight()+1)
 	return e.NewPayloadV3(payload)
 }
 
-func (e *engineAPIserver) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
+func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
 	e.logger.Debug("trying: NewPayloadV3", "payload.ID", payload.ID(), "blockHash", payload.BlockHash.Hex(), "height", e.node.LastBlockHeight()+1)
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -290,23 +271,32 @@ func (e *engineAPIserver) NewPayloadV3(payload eth.ExecutionPayload) (*eth.Paylo
 
 // ------------------------------------------------------------------------------------------------------------------
 
-type ethLikeServer struct {
+type EthAPI struct {
 	node   Node
 	logger server.Logger
+	chainID string
 }
 
-func (e *ethLikeServer) GetProof(address common.Address, storage []Hash, blockTag string) (*eth.AccountResult, error) {
+func NewEthAPI(node Node, chainID string, logger server.Logger) *EthAPI {
+	return &EthAPI{
+		node:   node,
+		chainID: chainID,
+		logger: logger,
+	}
+}
+
+func (e *EthAPI) GetProof(address common.Address, storage []Hash, blockTag string) (*eth.AccountResult, error) {
 	e.logger.Debug("GetProof", "address", address, "storage", storage, "blockTag", blockTag)
 	telemetry.IncrCounter(1, "query", "GetProof")
 
 	return &eth.AccountResult{}, nil
 }
 
-func (e *ethLikeServer) ChainId() hexutil.Big {
+func (e *EthAPI) ChainId() hexutil.Big {
 	e.logger.Debug("ChainId")
 	telemetry.IncrCounter(1, "query", "ChainId")
 
-	chainID, ok := new(big.Int).SetString(e.node.GetChainID(), 10)
+	chainID, ok := new(big.Int).SetString(e.chainID, 10)
 	if !ok {
 		panic("chain id is not numerical")
 	}
@@ -316,7 +306,7 @@ func (e *ethLikeServer) ChainId() hexutil.Big {
 // GetBalance returns wrapped Ethers balance on L2 chain
 // - address: EVM address
 // - blockNumber: a valid BlockLabel or hex encoded big.Int; default to latest/unsafe block
-func (e *ethLikeServer) GetBalance(address common.Address, id any) (hexutil.Big, error) {
+func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error) {
 	e.logger.Debug("GetBalance", "address", address, "id", id)
 	telemetry.IncrCounter(1, "query", "GetBalance")
 
@@ -333,7 +323,7 @@ func (e *ethLikeServer) GetBalance(address common.Address, id any) (hexutil.Big,
 	return (hexutil.Big)(*balance), nil
 }
 
-func (e *ethLikeServer) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, error) {
+func (e *EthAPI) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, error) {
 	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
 	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
@@ -344,7 +334,7 @@ func (e *ethLikeServer) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, 
 	return b.ToEthLikeBlock(inclTx), nil
 }
 
-func (e *ethLikeServer) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
+func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
 	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
 	b, err := e.node.GetBlock(id)
@@ -361,12 +351,19 @@ func (e *ethLikeServer) GetBlockByNumber(id any, inclTx bool) (map[string]any, e
 
 // ------------------------------------------------------------------------------------------------------------------
 
-type peptideServer struct {
+type PeptideAPI struct {
 	node   Node
 	logger server.Logger
 }
 
-func (e *peptideServer) GetBlock(id any) (*Block, error) {
+func NewPeptideAPI(node Node, logger server.Logger) *PeptideAPI {
+	return &PeptideAPI{
+		node:   node,
+		logger: logger,
+	}
+}
+
+func (e *PeptideAPI) GetBlock(id any) (*Block, error) {
 	e.logger.Debug("GetBlock", "id", id)
 	telemetry.IncrCounter(1, "query", "GetBlock")
 
@@ -380,12 +377,19 @@ func (e *peptideServer) GetBlock(id any) (*Block, error) {
 // ------------------------------------------------------------------------------------------------------------------
 
 // admin API
-type adminServer struct {
+type AdminAPI struct {
 	node   Node
 	logger server.Logger
 }
 
-func (e *adminServer) Rollback(headHeight, safeHeight, finalizedHeight int64) error {
+func NewAdminAPI(node Node, logger server.Logger) *AdminAPI {
+	return &AdminAPI{
+		node:   node,
+		logger: logger,
+	}
+}
+
+func (e *AdminAPI) Rollback(headHeight, safeHeight, finalizedHeight int64) error {
 	e.logger.Debug("Rollback", "head", headHeight, "safe", safeHeight, "finalized", finalizedHeight)
 	head, err := e.node.GetBlock(headHeight)
 	if err != nil {
