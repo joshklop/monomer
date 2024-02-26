@@ -82,7 +82,7 @@ func NewPeptideNode(
 	enabledApis server.ApiEnabledMask,
 	logger server.Logger,
 ) *PeptideNode {
-	bs := store.NewBlockStore(bsdb, eetypes.BlockUnmarshaler)
+	bs := store.NewBlockStore(bsdb)
 	txstore := txstore.NewTxStore(txstoreDb, logger)
 	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, genesis, logger.With("module", "node"))
 	cometServer, cometRpcServer := cometbft_rpc.NewCometRpcServer(
@@ -166,7 +166,7 @@ func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (
 	block.Header = &header
 	block.GasLimit = hexutil.Uint64(DefaultGasLimit)
 
-	bs := store.NewBlockStore(bsdb, eetypes.BlockUnmarshaler)
+	bs := store.NewBlockStore(bsdb)
 
 	bs.AddBlock(&block)
 	hash := block.Hash()
@@ -261,14 +261,9 @@ func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs s
 }
 
 func (cs *PeptideNode) resume() {
-	lastBlockData := cs.bs.BlockByLabel(eth.Unsafe)
-	if lastBlockData == nil {
+	lastBlock := cs.bs.BlockByLabel(eth.Unsafe)
+	if lastBlock == nil {
 		panic("could not load current block")
-	}
-
-	lastBlock, ok := lastBlockData.(*Block)
-	if !ok {
-		panic("could not infer current block from BlockData")
 	}
 
 	// in the odd case the app state comes up out of sync with the blockstore, we perform a mini-rollback
@@ -493,7 +488,7 @@ func (cs *PeptideNode) SearchTx(ctx context.Context, q *cmtquery.Query) ([]*abci
 	return cs.txstore.Search(ctx, q)
 }
 
-func (cs *PeptideNode) getBlockByNumber(number int64) eetypes.BlockData {
+func (cs *PeptideNode) getBlockByNumber(number int64) *eetypes.Block {
 	switch ethrpc.BlockNumber(number) {
 	// optimism expects these two to be the same
 	case ethrpc.PendingBlockNumber, ethrpc.LatestBlockNumber:
@@ -509,7 +504,7 @@ func (cs *PeptideNode) getBlockByNumber(number int64) eetypes.BlockData {
 	}
 }
 
-func (cs *PeptideNode) getBlockByString(str string) eetypes.BlockData {
+func (cs *PeptideNode) getBlockByString(str string) *eetypes.Block {
 	// use base 0 so it's autodetected
 	number, err := strconv.ParseInt(str, 0, 64)
 	if err == nil {
@@ -534,7 +529,7 @@ func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
 	defer cs.lock.RUnlock()
 	cs.logger.Info("PeptideNode.GetBlock", "id", id)
 
-	block, err := func() (eetypes.BlockData, error) {
+	block, err := func() (*eetypes.Block, error) {
 		switch v := id.(type) {
 		case nil:
 			return cs.bs.BlockByLabel(eth.Unsafe), nil
@@ -557,7 +552,7 @@ func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
 	if block == nil {
 		return nil, ethereum.NotFound
 	}
-	return eetypes.MustInferBlock(block), nil
+	return block, nil
 }
 
 func (cs *PeptideNode) UpdateLabel(label eth.BlockLabel, hash Hash) error {
@@ -721,7 +716,7 @@ func (cs *PeptideNode) sealBlock(block *Block) *Block {
 
 // CurrentBlock returns the latest canonical block.
 // This follows the naming convention of a L2 chain's current canonical block.
-func (cs *PeptideNode) CurrentBlock() eetypes.BlockData {
+func (cs *PeptideNode) CurrentBlock() *eetypes.Block {
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
 	return cs.bs.BlockByLabel(eth.Unsafe)

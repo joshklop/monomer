@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"encoding/json"
 
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -11,15 +12,15 @@ import (
 type BlockStoreReader interface {
 	// Retrieves a block from the store by its hash and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByHash(hash eetypes.Hash) eetypes.BlockData
+	BlockByHash(hash eetypes.Hash) *eetypes.Block
 
 	// Retrieves a block from the store by its height and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByNumber(height int64) eetypes.BlockData
+	BlockByNumber(height int64) *eetypes.Block
 
 	// Retrieves a block from the store by its label and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByLabel(label eth.BlockLabel) eetypes.BlockData
+	BlockByLabel(label eth.BlockLabel) *eetypes.Block
 }
 
 type BlockStoreWriter interface {
@@ -28,7 +29,7 @@ type BlockStoreWriter interface {
 	// NOTE: no block by label is updated. We have to call UpdateLabel to update labels explicitly including "unsafe"
 	// label.
 	// EE client won't observe latest block changes until after Forkchoice is performed on the added block
-	AddBlock(block eetypes.BlockData)
+	AddBlock(block *eetypes.Block)
 
 	// Given a block already in the store it updates its label to `label`. A common use case for this method
 	// is when the op-node informs the engine of a new finalised block so the engine can go back to the
@@ -52,7 +53,7 @@ type BlockStore interface {
 // We hide the block marshaling behind this function so the store does not need to know
 // about any concrete type when fetching blocks from the db. The unmarshaling is up to
 // the caller.
-type BlockUnmarshaler func(bz []byte) (eetypes.BlockData, error)
+type BlockUnmarshaler func(bz []byte) (*eetypes.Block, error)
 
 /*
 * BlockStore implementation
@@ -65,7 +66,6 @@ type blockStore struct {
 	// we trust the db handles concurrency accordingly.
 	// For now, we don't need mutexes
 	db           dbm.DB
-	unmarshaller BlockUnmarshaler
 
 	// TODO store pointers to blocks in a list so whenever there's a re-org we can walk the tree up
 	//      until the new root and prune everything in between
@@ -73,20 +73,23 @@ type blockStore struct {
 
 var _ BlockStore = (*blockStore)(nil)
 
-func NewBlockStore(db dbm.DB, unmarshaller BlockUnmarshaler) BlockStore {
+func NewBlockStore(db dbm.DB) BlockStore {
 	return &blockStore{
 		db:           db,
-		unmarshaller: unmarshaller,
 	}
 }
 
-func (b *blockStore) AddBlock(block eetypes.BlockData) {
+func (b *blockStore) AddBlock(block *eetypes.Block) {
 	// use batching for atomic updates
 	batch := b.db.NewBatch()
 	defer batch.Close()
 
 	hash := block.Hash()
-	if err := batch.Set(hashKey(hash), block.Bytes()); err != nil {
+	blockBytes, err := json.Marshal(block)
+	if err != nil {
+		panic(err)
+	}
+	if err := batch.Set(hashKey(hash), blockBytes); err != nil {
 		panic(err)
 	}
 	if err := batch.Set(heightKey(block.Height()), hash[:]); err != nil {
@@ -111,19 +114,19 @@ func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error 
 	return nil
 }
 
-func (b *blockStore) BlockByHash(hash eetypes.Hash) eetypes.BlockData {
+func (b *blockStore) BlockByHash(hash eetypes.Hash) *eetypes.Block {
 	bz := b.get(hashKey(hash))
 	if len(bz) == 0 {
 		return nil
 	}
-	block, err := b.unmarshaller(bz)
-	if err != nil {
+	block := new(eetypes.Block)
+	if err := json.Unmarshal(bz, &block); err != nil {
 		return nil
 	}
 	return block
 }
 
-func (b *blockStore) BlockByNumber(height int64) eetypes.BlockData {
+func (b *blockStore) BlockByNumber(height int64) *eetypes.Block {
 	bz := b.get(heightKey(height))
 	if len(bz) == 0 {
 		return nil
@@ -133,7 +136,7 @@ func (b *blockStore) BlockByNumber(height int64) eetypes.BlockData {
 	return b.BlockByHash(hash)
 }
 
-func (b *blockStore) BlockByLabel(label eth.BlockLabel) eetypes.BlockData {
+func (b *blockStore) BlockByLabel(label eth.BlockLabel) *eetypes.Block {
 	bz := b.get(labelKey(label))
 	if len(bz) == 0 {
 		return nil

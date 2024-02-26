@@ -2,7 +2,6 @@ package types
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -23,16 +22,6 @@ var (
 )
 
 type Bytes []byte
-
-// This is only a representation of the block from the block-store point of view
-// The interface is missing key accessors to fields within the block but that are not needed
-// by the block store.
-type BlockData interface {
-	Height() int64
-	Bytes() []byte
-	Hash() Hash
-	ParentHash() Hash
-}
 
 type Header struct {
 	ChainID string `json:"chain_id"`
@@ -84,26 +73,8 @@ type Block struct {
 	Withdrawals     *types.Withdrawals `json:"withdrawals,omitempty"`
 }
 
-var _ BlockData = (*Block)(nil)
-
-func BlockUnmarshaler(bytes []byte) (BlockData, error) {
-	b := Block{}
-	if err := json.Unmarshal(bytes, &b); err != nil {
-		panic(err)
-	}
-	return &b, nil
-}
-
 func (b *Block) Height() int64 {
 	return b.Header.Height
-}
-
-func (b *Block) Bytes() []byte {
-	bytes, err := json.Marshal(b)
-	if err != nil {
-		panic(err)
-	}
-	return bytes
 }
 
 // Hash returns a unique hash of the block, used as the block identifier
@@ -192,12 +163,4 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 		result["transactionsRoot"] = types.EmptyTxsHash
 	}
 	return result
-}
-
-func MustInferBlock(b BlockData) *Block {
-	block, ok := b.(*Block)
-	if !ok {
-		panic("could not infer block from BlockData")
-	}
-	return block
 }

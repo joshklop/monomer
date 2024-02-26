@@ -6,7 +6,6 @@ import (
 
 	"github.com/polymerdao/monomer/app/node/server/engine"
 	"github.com/polymerdao/monomer/app/node/server"
-	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	dbm "github.com/cometbft/cometbft-db"
@@ -49,6 +48,6 @@ func TestChainId(t *testing.T) {
 	defer func() {
 		require.NoError(t, db.Close())
 	}()
-	blockStore := store.NewBlockStore(db, eetypes.BlockUnmarshaler)
+	blockStore := store.NewBlockStore(db)
 	engine.NewEthAPI(blockStore, newMockRegister(), "chainid", server.DefaultLogger())
 }
