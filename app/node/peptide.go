@@ -107,7 +107,7 @@ func NewPeptideNode(
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
 func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, logger server.Logger) []ethrpc.API {
-	apis := []ethrpc.API{
+	return []ethrpc.API{
 		{
 			Namespace: "engine",
 			Service:   engine.NewEngineAPI(p, p.ps, logger.With("module", "engine")),
@@ -119,13 +119,6 @@ func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, 
 			Service:   engine.NewPeptideAPI(p, logger.With("module", "peptide")),
 		},
 	}
-	if enabledApis.IsAdminApiEnabled() {
-		apis = append(apis, ethrpc.API{
-			Namespace: "admin",
-			Service:   engine.NewAdminAPI(p, logger),
-		})
-	}
-	return apis
 }
 
 func NewPeptideNodeFromConfig(

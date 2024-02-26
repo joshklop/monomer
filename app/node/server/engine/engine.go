@@ -3,43 +3,34 @@ package engine
 import (
 	"fmt"
 	"log"
-	"math/big"
-	"strconv"
 	"sync"
 
-	"github.com/armon/go-metrics"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/beacon/engine"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 )
 
-type (
-	Hash  = eetypes.Hash
-	Block = eetypes.Block
-)
+type BlockStore interface {
+	GetBlock(id any) (*eetypes.Block, error)
+}
 
 type Node interface {
+	BlockStore
+
 	LastBlockHeight() int64
 	// SavePayload saves the payload by its ID if it's not already in payload cache.
 	// Also update the latest Payload if this is a new payload
 	// The latest unsafe block hash
 	//
 	// The latest unsafe block refers to sealed blocks, not the one that's being built on
-	HeadBlockHash() Hash
+	HeadBlockHash() eetypes.Hash
 	CommitBlock() error
-	// GetETH returns the wrapped ETH balance in Wei of the given EVM address.
-	GetETH(address common.Address, height int64) (*big.Int, error)
-
-	GetBlock(id any) (*Block, error)
-	UpdateLabel(label eth.BlockLabel, hash Hash) error
-
-	Rollback(head, safe, finalized *Block) error
+	UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error
+	Rollback(head, safe, finalized *eetypes.Block) error
 }
 
 type EngineAPI struct {
@@ -57,7 +48,7 @@ func NewEngineAPI(node Node, payloadStore payloadstore.PayloadStore, logger serv
 	}
 }
 
-func (e *EngineAPI) rollback(head *Block, safeHash, finalizedHash eetypes.Hash) error {
+func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash eetypes.Hash) error {
 	e.logger.Debug("engineAPIserver.rollback", "head", head.Height(), "safe", safeHash, "finalized", finalizedHash)
 
 	getId := func(label string, hash eetypes.Hash) any {
@@ -267,142 +258,4 @@ func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStat
 		Status:          eth.ExecutionValid,
 		LatestValidHash: &headBlockHash,
 	}, nil
-}
-
-// ------------------------------------------------------------------------------------------------------------------
-
-type EthAPI struct {
-	node   Node
-	logger server.Logger
-	chainID string
-}
-
-func NewEthAPI(node Node, chainID string, logger server.Logger) *EthAPI {
-	return &EthAPI{
-		node:   node,
-		chainID: chainID,
-		logger: logger,
-	}
-}
-
-func (e *EthAPI) GetProof(address common.Address, storage []Hash, blockTag string) (*eth.AccountResult, error) {
-	e.logger.Debug("GetProof", "address", address, "storage", storage, "blockTag", blockTag)
-	telemetry.IncrCounter(1, "query", "GetProof")
-
-	return &eth.AccountResult{}, nil
-}
-
-func (e *EthAPI) ChainId() hexutil.Big {
-	e.logger.Debug("ChainId")
-	telemetry.IncrCounter(1, "query", "ChainId")
-
-	chainID, ok := new(big.Int).SetString(e.chainID, 10)
-	if !ok {
-		panic("chain id is not numerical")
-	}
-	return (hexutil.Big)(*chainID)
-}
-
-// GetBalance returns wrapped Ethers balance on L2 chain
-// - address: EVM address
-// - blockNumber: a valid BlockLabel or hex encoded big.Int; default to latest/unsafe block
-func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error) {
-	e.logger.Debug("GetBalance", "address", address, "id", id)
-	telemetry.IncrCounter(1, "query", "GetBalance")
-
-	b, err := e.node.GetBlock(id)
-	if err != nil {
-		return hexutil.Big{}, err
-	}
-
-	balance, err := e.node.GetETH(address, b.Height())
-	if err != nil {
-		err = fmt.Errorf("failed to get balance for address %s at block height %d, %w", address, b.Height(), err)
-		return hexutil.Big{}, err
-	}
-	return (hexutil.Big)(*balance), nil
-}
-
-func (e *EthAPI) GetBlockByHash(hash Hash, inclTx bool) (map[string]any, error) {
-	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
-
-	b, err := e.node.GetBlock(hash.Bytes())
-	if err != nil {
-		return nil, err
-	}
-	return b.ToEthLikeBlock(inclTx), nil
-}
-
-func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
-
-	b, err := e.node.GetBlock(id)
-	// OpNode needs a NotFound error to trigger Engine reset
-	if err != nil || b == nil {
-		e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", false)
-		// non-nil err translates to a TempErr in OpNode;
-		// What we need is a nil err/block, which translates to a NotFound error in OpNode
-		return nil, nil
-	}
-	e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", true)
-	return b.ToEthLikeBlock(inclTx), nil
-}
-
-// ------------------------------------------------------------------------------------------------------------------
-
-type PeptideAPI struct {
-	node   Node
-	logger server.Logger
-}
-
-func NewPeptideAPI(node Node, logger server.Logger) *PeptideAPI {
-	return &PeptideAPI{
-		node:   node,
-		logger: logger,
-	}
-}
-
-func (e *PeptideAPI) GetBlock(id any) (*Block, error) {
-	e.logger.Debug("GetBlock", "id", id)
-	telemetry.IncrCounter(1, "query", "GetBlock")
-
-	block, err := e.node.GetBlock(id)
-	if err != nil {
-		return nil, err
-	}
-	return block, nil
-}
-
-// ------------------------------------------------------------------------------------------------------------------
-
-// admin API
-type AdminAPI struct {
-	node   Node
-	logger server.Logger
-}
-
-func NewAdminAPI(node Node, logger server.Logger) *AdminAPI {
-	return &AdminAPI{
-		node:   node,
-		logger: logger,
-	}
-}
-
-func (e *AdminAPI) Rollback(headHeight, safeHeight, finalizedHeight int64) error {
-	e.logger.Debug("Rollback", "head", headHeight, "safe", safeHeight, "finalized", finalizedHeight)
-	head, err := e.node.GetBlock(headHeight)
-	if err != nil {
-		return err
-	}
-	safe, err := e.node.GetBlock(safeHeight)
-	if err != nil {
-		return err
-	}
-	finalized, err := e.node.GetBlock(finalizedHeight)
-	if err != nil {
-		return err
-	}
-
-	return e.node.Rollback(head, safe, finalized)
 }

@@ -34,12 +34,7 @@ func EnableAllApis() ApiEnabledMask {
 	return ^ApiEnabledMask(0)
 }
 
-func (a ApiEnabledMask) IsAdminApiEnabled() bool {
-	return a&adminApiEnabled > 0
-}
-
 const (
-	adminApiEnabled = 1 << 0
 	// PeptideApiEnabled = 1 << 1
 	// EthApiEnabled = 1 << 2
 )
@@ -69,7 +64,6 @@ const (
 	overrideFlag                = "override"
 	genesisTimeFlag             = "genesis-time"
 	prometheusRetentionTimeFlag = "prometheus-retention-time"
-	adminFlag                   = "admin-api"
 	blocksFlag                  = "blocks"
 	rollbackBlocksFlag          = "rollback-blocks"
 	rollbackStore               = "store"
@@ -126,13 +120,6 @@ func (c *Config) WithAbciServerRpc() *Config {
 
 func (c *Config) WithAbciServerGrpc() *Config {
 	c.AbciServerGrpc = NewEndpoint(c.mustReadStringFlag(appGrpcAddressFlag))
-	return c
-}
-
-func (c *Config) WithAdminApi() *Config {
-	if c.mustReadBoolFlag(adminFlag) {
-		c.Apis |= adminApiEnabled
-	}
 	return c
 }
 
@@ -360,11 +347,6 @@ func AddStartCommandFlags(cmd *cobra.Command) {
 		prometheusRetentionTimeFlag,
 		0,
 		"Prometheus retention time in seconds. 0 means prometheus sink is disabled",
-	)
-	cmd.Flags().Bool(
-		adminFlag,
-		false,
-		"If set, it enables the admin API",
 	)
 }
 
