@@ -3,10 +3,10 @@ package engine
 import (
 	"errors"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/cosmos/cosmos-sdk/telemetry"
-	"github.com/polymerdao/monomer/app/node/server"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 )

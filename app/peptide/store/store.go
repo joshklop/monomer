@@ -1,12 +1,12 @@
 package store
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum/common"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 )
 
@@ -66,7 +66,7 @@ type BlockUnmarshaler func(bz []byte) (*eetypes.Block, error)
 type blockStore struct {
 	// we trust the db handles concurrency accordingly.
 	// For now, we don't need mutexes
-	db           dbm.DB
+	db dbm.DB
 
 	// TODO store pointers to blocks in a list so whenever there's a re-org we can walk the tree up
 	//      until the new root and prune everything in between
@@ -76,7 +76,7 @@ var _ BlockStore = (*blockStore)(nil)
 
 func NewBlockStore(db dbm.DB) BlockStore {
 	return &blockStore{
-		db:           db,
+		db: db,
 	}
 }
 

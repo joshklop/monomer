@@ -66,9 +66,9 @@ func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
 type Block struct {
 	Txs             bfttypes.Txs       `json:"txs"`
 	Header          *Header            `json:"header"`
-	ParentBlockHash common.Hash               `json:"parentHash"`
+	ParentBlockHash common.Hash        `json:"parentHash"`
 	GasLimit        hexutil.Uint64     `json:"gasLimit"`
-	BlockHash       common.Hash               `json:"hash"`
+	BlockHash       common.Hash        `json:"hash"`
 	PrevRandao      eth.Bytes32        `json:"prevRandao"`
 	Withdrawals     *types.Withdrawals `json:"withdrawals,omitempty"`
 }

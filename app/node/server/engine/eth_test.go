@@ -6,12 +6,12 @@ import (
 	"sync"
 	"testing"
 
-	eetypes "github.com/polymerdao/monomer/app/node/types"
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/polymerdao/monomer/app/node/server"
 	"github.com/polymerdao/monomer/app/node/server/engine"
+	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +71,7 @@ func TestGetBalance(t *testing.T) {
 	balance := big.NewInt(2)
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
-			Height: 0,
+			Height:  0,
 			ChainID: chainID.ToInt().String(),
 		},
 		BlockHash: common.Hash{0},
@@ -79,7 +79,7 @@ func TestGetBalance(t *testing.T) {
 	headHash := common.Hash{1}
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
-			Height: 1,
+			Height:  1,
 			ChainID: chainID.ToInt().String(),
 		},
 		BlockHash: headHash,
