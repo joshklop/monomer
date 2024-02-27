@@ -18,7 +18,7 @@ var (
 	EmptyBloom      = types.Bloom(make([]byte, types.BloomByteLength))
 	EmptyExtra      = make([]byte, 0)
 	HashOfEmptyHash = sha256.Sum256([]byte{})
-	ZeroHash        = Hash{}
+	ZeroHash        = common.Hash{}
 )
 
 type Bytes []byte
@@ -66,9 +66,9 @@ func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
 type Block struct {
 	Txs             bfttypes.Txs       `json:"txs"`
 	Header          *Header            `json:"header"`
-	ParentBlockHash Hash               `json:"parentHash"`
+	ParentBlockHash common.Hash               `json:"parentHash"`
 	GasLimit        hexutil.Uint64     `json:"gasLimit"`
-	BlockHash       Hash               `json:"hash"`
+	BlockHash       common.Hash               `json:"hash"`
 	PrevRandao      eth.Bytes32        `json:"prevRandao"`
 	Withdrawals     *types.Withdrawals `json:"withdrawals,omitempty"`
 }
@@ -78,7 +78,7 @@ func (b *Block) Height() int64 {
 }
 
 // Hash returns a unique hash of the block, used as the block identifier
-func (b *Block) Hash() Hash {
+func (b *Block) Hash() common.Hash {
 	if b.BlockHash == ZeroHash {
 		header := types.Header{}
 		header.ParentHash = b.ParentHash()
@@ -102,11 +102,11 @@ func (b *Block) Hash() Hash {
 	return b.BlockHash
 }
 
-func (b *Block) ParentHash() Hash {
+func (b *Block) ParentHash() common.Hash {
 	return b.ParentBlockHash
 }
 
-func (b *Block) Transactions() (types.Transactions, Hash) {
+func (b *Block) Transactions() (types.Transactions, common.Hash) {
 	chainId, ok := big.NewInt(0).SetString(b.Header.ChainID, 10)
 	if !ok {
 		panic(fmt.Sprintf("block chain id is not an integer %s", b.Header.ChainID))

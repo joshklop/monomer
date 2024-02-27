@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/beacon/engine"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
@@ -23,9 +24,9 @@ type Node interface {
 	// The latest unsafe block hash
 	//
 	// The latest unsafe block refers to sealed blocks, not the one that's being built on
-	HeadBlockHash() eetypes.Hash
+	HeadBlockHash() common.Hash
 	CommitBlock() error
-	UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error
+	UpdateLabel(label eth.BlockLabel, hash common.Hash) error
 	Rollback(head, safe, finalized *eetypes.Block) error
 }
 
@@ -46,10 +47,10 @@ func NewEngineAPI(node Node, blockStore store.BlockStoreReader, payloadStore pay
 	}
 }
 
-func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash eetypes.Hash) error {
+func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash common.Hash) error {
 	e.logger.Debug("engineAPIserver.rollback", "head", head.Height(), "safe", safeHash, "finalized", finalizedHash)
 
-	getBlock := func(label eth.BlockLabel, hash eetypes.Hash) *eetypes.Block {
+	getBlock := func(label eth.BlockLabel, hash common.Hash) *eetypes.Block {
 		if hash != eetypes.ZeroHash {
 			return e.blockStore.BlockByHash(hash)
 		}

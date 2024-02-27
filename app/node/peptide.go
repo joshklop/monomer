@@ -51,14 +51,7 @@ const (
 	MempoolDbName    = "mempool"
 )
 
-type (
-	Endpoint = server.Endpoint
-	NodeInfo = cometbft_rpc.NodeInfo
-	Block    = eetypes.Block
-	Hash     = eetypes.Hash
-)
-
-type AbciClientCreator = func(app abcitypes.Application) abciclient.Client
+type AbciClientCreator func(app abcitypes.Application) abciclient.Client
 
 // NewLocalClient creates a new local client to ABCI server.
 func NewLocalClient(app abcitypes.Application) abciclient.Client {
@@ -74,8 +67,8 @@ func NewPeptideNode(
 	bsdb tmdb.DB,
 	txstoreDb tmdb.DB,
 	mempooldb tmdb.DB,
-	appEndpoint *Endpoint,
-	eeEndpoint *Endpoint,
+	appEndpoint *server.Endpoint,
+	eeEndpoint *server.Endpoint,
 	chainApp *peptide.PeptideApp,
 	clientCreator AbciClientCreator,
 	genesis *PeptideGenesis,
@@ -143,8 +136,8 @@ func NewPeptideNodeFromConfig(
 	), nil
 }
 
-func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (*Block, error) {
-	block := Block{}
+func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (*eetypes.Block, error) {
+	block := eetypes.Block{}
 	l1TxBytes, err := derive.L1InfoDepositBytes(
 		&rollup.Config{},
 		// TODO fill this out?
@@ -192,8 +185,8 @@ type PeptideNode struct {
 	logger   tmlog.Logger
 
 	// simulated node info
-	lastNodeInfo     NodeInfo
-	earliestNodeInfo NodeInfo
+	lastNodeInfo     cometbft_rpc.NodeInfo
+	earliestNodeInfo cometbft_rpc.NodeInfo
 
 	// TODO: remove this flag since we don't support non-engine mode here
 	engineMode bool
@@ -201,7 +194,7 @@ type PeptideNode struct {
 	txResults []*abcitypes.TxResult
 
 	bs          store.BlockStore
-	latestBlock *Block // latest mined block that may not be canonical
+	latestBlock *eetypes.Block // latest mined block that may not be canonical
 
 	ps payloadstore.PayloadStore
 	// L2 txs are stored in mempool until block is sealed
@@ -438,13 +431,13 @@ func (cs *PeptideNode) OnWebsocketDisconnect(remoteAddr string, logger tmlog.Log
 
 // LastNodeInfo returns the latest node info.
 // The nodeInfo is nothing but a placeholder intended only for cometbft rpc server.
-func (cs *PeptideNode) LastNodeInfo() NodeInfo {
+func (cs *PeptideNode) LastNodeInfo() cometbft_rpc.NodeInfo {
 	return cs.lastNodeInfo
 }
 
 // EarliestNodeInfo returns the earliest node info.
 // The nodeInfo is nothing but a placeholder intended only for cometbft rpc server.
-func (cs *PeptideNode) EarliestNodeInfo() NodeInfo {
+func (cs *PeptideNode) EarliestNodeInfo() cometbft_rpc.NodeInfo {
 	return cs.earliestNodeInfo
 }
 
@@ -523,7 +516,7 @@ func (cs *PeptideNode) getBlockByString(str string) *eetypes.Block {
 	return cs.bs.BlockByLabel(eth.BlockLabel(str))
 }
 
-func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
+func (cs *PeptideNode) GetBlock(id any) (*eetypes.Block, error) {
 	cs.logger.Info("trying: PeptideNode.GetBlock", "id", id)
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
@@ -534,7 +527,7 @@ func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
 		case nil:
 			return cs.bs.BlockByLabel(eth.Unsafe), nil
 		case []byte:
-			return cs.bs.BlockByHash(Hash(v)), nil
+			return cs.bs.BlockByHash(common.Hash(v)), nil
 		case int64:
 			return cs.getBlockByNumber(v), nil
 		// sometimes int values are weirdly converted to float?
@@ -555,7 +548,7 @@ func (cs *PeptideNode) GetBlock(id any) (*Block, error) {
 	return block, nil
 }
 
-func (cs *PeptideNode) UpdateLabel(label eth.BlockLabel, hash Hash) error {
+func (cs *PeptideNode) UpdateLabel(label eth.BlockLabel, hash common.Hash) error {
 	cs.logger.Debug("trying: PeptideNode.UpdateLabel", "label", label, "hash", hash)
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
@@ -604,15 +597,15 @@ func (cs *PeptideNode) commitBlockAndUpdateNodeInfo() {
 }
 
 // startBuildingBlock starts building a new block for App is committed.
-func (cs *PeptideNode) startBuildingBlock() *Block {
+func (cs *PeptideNode) startBuildingBlock() *eetypes.Block {
 	// fill in block fields with L1 data
-	block := cs.fillBlockWithL1Data(&Block{})
+	block := cs.fillBlockWithL1Data(&eetypes.Block{})
 	cs.applyBlockTxs(block)
 	return block
 }
 
 // fillBlockWithL1Data fills in block fields with L1 data.
-func (cs *PeptideNode) fillBlockWithL1Data(block *Block) *Block {
+func (cs *PeptideNode) fillBlockWithL1Data(block *eetypes.Block) *eetypes.Block {
 	if cs.ps.Current() != nil {
 		// must include L1Txs for L2 block's L1Origin
 		txs := cs.ps.Current().Attrs.Transactions
@@ -630,7 +623,7 @@ func (cs *PeptideNode) fillBlockWithL1Data(block *Block) *Block {
 }
 
 // applyBlockL2Txs applies txs to the block that's currently being built.
-func (cs *PeptideNode) applyBlockTxs(block *Block) {
+func (cs *PeptideNode) applyBlockTxs(block *eetypes.Block) {
 	// TODO: ensure txs size doesn't exceed block size limit
 	for {
 		length, err := cs.txMempool.Len()
@@ -652,7 +645,7 @@ func (cs *PeptideNode) applyBlockTxs(block *Block) {
 
 // indexAndPublishAllTxs indexes all txs in the block that's currently being built.
 // This func should only be run once per block; or earlier tx indices will be overwritten by later txs.
-func (cs *PeptideNode) indexAndPublishAllTxs(block *Block) error {
+func (cs *PeptideNode) indexAndPublishAllTxs(block *eetypes.Block) error {
 	if len(block.Txs) != len(cs.txResults) {
 		return fmt.Errorf(
 			"number of txs (%d) in block %d does not match number of txResults (%d)",
@@ -675,7 +668,7 @@ func (cs *PeptideNode) indexAndPublishAllTxs(block *Block) error {
 	return nil
 }
 
-func (cs *PeptideNode) findParentHash() Hash {
+func (cs *PeptideNode) findParentHash() common.Hash {
 	lastBlock := cs.bs.BlockByNumber(cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight - 1)
 	if lastBlock != nil {
 		return lastBlock.Hash()
@@ -688,7 +681,7 @@ func (cs *PeptideNode) findParentHash() Hash {
 // payloadAttributes.
 //
 // sealBlock should be called after chainApp's committed. So chainApp.LastBlockHeight is the sealed block's height
-func (cs *PeptideNode) sealBlock(block *Block) *Block {
+func (cs *PeptideNode) sealBlock(block *eetypes.Block) *eetypes.Block {
 	cs.logger.Info("seal block", "height", cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight)
 
 	// finalize block fields
@@ -791,7 +784,7 @@ func (cs *PeptideNode) CommitBlock() error {
 }
 
 // HeadBlockHash returns the hash of the latest sealed block.
-func (cs *PeptideNode) HeadBlockHash() Hash {
+func (cs *PeptideNode) HeadBlockHash() common.Hash {
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
 	return cs.latestBlock.Hash()

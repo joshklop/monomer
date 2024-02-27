@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"encoding/json"
 
+	"github.com/ethereum/go-ethereum/common"
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
@@ -12,7 +13,7 @@ import (
 type BlockStoreReader interface {
 	// Retrieves a block from the store by its hash and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
-	BlockByHash(hash eetypes.Hash) *eetypes.Block
+	BlockByHash(hash common.Hash) *eetypes.Block
 
 	// Retrieves a block from the store by its height and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
@@ -35,7 +36,7 @@ type BlockStoreWriter interface {
 	// is when the op-node informs the engine of a new finalised block so the engine can go back to the
 	// store and update it.
 	// Returns error in case the block is not found
-	UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error
+	UpdateLabel(label eth.BlockLabel, hash common.Hash) error
 
 	// Removes all blocks up to (not including) height. Note that updating any label that may go stale
 	// is up to the caller
@@ -100,7 +101,7 @@ func (b *blockStore) AddBlock(block *eetypes.Block) {
 	}
 }
 
-func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error {
+func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash common.Hash) error {
 	found, err := b.db.Has(hashKey(hash))
 	if err != nil {
 		panic(err)
@@ -114,7 +115,7 @@ func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash eetypes.Hash) error 
 	return nil
 }
 
-func (b *blockStore) BlockByHash(hash eetypes.Hash) *eetypes.Block {
+func (b *blockStore) BlockByHash(hash common.Hash) *eetypes.Block {
 	bz := b.get(hashKey(hash))
 	if len(bz) == 0 {
 		return nil
@@ -131,7 +132,7 @@ func (b *blockStore) BlockByNumber(height int64) *eetypes.Block {
 	if len(bz) == 0 {
 		return nil
 	}
-	var hash eetypes.Hash
+	var hash common.Hash
 	copy(hash[:], bz)
 	return b.BlockByHash(hash)
 }
@@ -141,7 +142,7 @@ func (b *blockStore) BlockByLabel(label eth.BlockLabel) *eetypes.Block {
 	if len(bz) == 0 {
 		return nil
 	}
-	var hash eetypes.Hash
+	var hash common.Hash
 	copy(hash[:], bz)
 	return b.BlockByHash(hash)
 }
@@ -166,7 +167,7 @@ func (b *blockStore) RollbackToHeight(height int64) error {
 		if err := batch.Delete(secondaryKey); err != nil {
 			return err
 		}
-		mainKey := hashKey(eetypes.Hash(hash))
+		mainKey := hashKey(common.Hash(hash))
 		if err := batch.Delete(mainKey); err != nil {
 			return err
 		}
@@ -185,7 +186,7 @@ func (b *blockStore) get(key []byte) []byte {
 	return bz
 }
 
-func hashKey(hash eetypes.Hash) []byte {
+func hashKey(hash common.Hash) []byte {
 	return []byte(fmt.Sprintf("bh:%x", hash))
 }
 

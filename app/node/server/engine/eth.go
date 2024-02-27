@@ -39,7 +39,7 @@ func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID 
 // TODO the block store should only query the canonical chain.
 // Right now it does not.
 
-func (e *EthAPI) GetProof(address common.Address, storage []eetypes.Hash, blockTag string) (*eth.AccountResult, error) {
+func (e *EthAPI) GetProof(address common.Address, storage []common.Hash, blockTag string) (*eth.AccountResult, error) {
 	e.logger.Debug("GetProof", "address", address, "storage", storage, "blockTag", blockTag)
 	telemetry.IncrCounter(1, "query", "GetProof")
 
@@ -72,7 +72,7 @@ func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error)
 	return (hexutil.Big)(*balance), nil
 }
 
-func (e *EthAPI) GetBlockByHash(hash eetypes.Hash, inclTx bool) (map[string]any, error) {
+func (e *EthAPI) GetBlockByHash(hash common.Hash, inclTx bool) (map[string]any, error) {
 	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
 	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
 
