@@ -4,99 +4,70 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 
-	"github.com/armon/go-metrics"
-	"github.com/cosmos/cosmos-sdk/telemetry"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/polymerdao/monomer/app/node/server"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 )
 
 type WeiRegister interface {
+	// Balance returns a non-nil balance and a nil error, or a nil balance and a non-nil error.
 	Balance(address common.Address, height int64) (*big.Int, error)
 }
 
 type EthAPI struct {
 	blockStore store.BlockStoreReader
-	logger     server.Logger
 	register   WeiRegister
 	chainID    *hexutil.Big
 }
 
-func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID *hexutil.Big, logger server.Logger) *EthAPI {
+func NewEthAPI(blockStore store.BlockStoreReader, register WeiRegister, chainID *hexutil.Big) *EthAPI {
 	return &EthAPI{
 		blockStore: blockStore,
 		register:   register,
 		chainID:    chainID,
-		logger:     logger,
 	}
 }
 
-// TODO the block store should only query the canonical chain.
-// Right now it does not.
-
 func (e *EthAPI) GetProof(address common.Address, storage []common.Hash, blockTag string) (*eth.AccountResult, error) {
-	e.logger.Debug("GetProof", "address", address, "storage", storage, "blockTag", blockTag)
-	telemetry.IncrCounter(1, "query", "GetProof")
-
-	return &eth.AccountResult{}, nil
+	// TODO
+	return nil, nil
 }
 
 func (e *EthAPI) ChainId() *hexutil.Big {
 	return e.chainID
 }
 
-// GetBalance returns wrapped Ethers balance on L2 chain
-// - address: EVM address
-// - blockNumber: a valid BlockLabel or hex encoded big.Int; default to latest/unsafe block
-func (e *EthAPI) GetBalance(address common.Address, id any) (hexutil.Big, error) {
-	// TODO: why do we need this function? It would be nice if we don't need it. We could remove the register and references to the app in the EthAPI.
-	e.logger.Debug("GetBalance", "address", address, "id", id)
-	telemetry.IncrCounter(1, "query", "GetBalance")
-
+func (e *EthAPI) GetBalance(address common.Address, id any) (*hexutil.Big, error) {
 	b := e.blockByID(id)
 	if b == nil {
-		e.logger.Debug("GetBlockByNumber", "id", id, "found", false)
-		return hexutil.Big{}, errors.New("block not found")
+		return nil, errors.New("block not found")
 	}
 
 	balance, err := e.register.Balance(address, b.Height())
 	if err != nil {
-		err = fmt.Errorf("failed to get balance for address %s at block height %d, %w", address, b.Height(), err)
-		return hexutil.Big{}, err
+		return nil, fmt.Errorf("get balance for address %s at height %d: %v", address, b.Header.Height, err)
 	}
-	return (hexutil.Big)(*balance), nil
+	return (*hexutil.Big)(balance), nil
 }
 
 func (e *EthAPI) GetBlockByHash(hash common.Hash, inclTx bool) (map[string]any, error) {
-	e.logger.Debug("GetBlockByHash", "hash", hash.Hex(), "inclTx", inclTx)
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByHash"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
-
 	b := e.blockStore.BlockByHash(hash)
 	if b == nil {
 		return nil, errors.New("block not found")
 	}
-	return b.ToEthLikeBlock(inclTx), nil
+	return adaptBlock(b, inclTx), nil
 }
 
 func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
-	telemetry.IncrCounterWithLabels([]string{"query", "GetBlockByNumber"}, 1, []metrics.Label{telemetry.NewLabel("inclTx", strconv.FormatBool(inclTx))})
-
 	b := e.blockByID(id)
-	// OpNode needs a NotFound error to trigger Engine reset
 	if b == nil {
-		e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", false)
-		// non-nil err translates to a TempErr in OpNode;
-		// What we need is a nil err/block, which translates to a NotFound error in OpNode
-		// TODO?
-		return nil, nil
+		return nil, errors.New("block not found") // TODO: do we need a special error?
 	}
-	e.logger.Debug("GetBlockByNumber", "id", id, "inclTx", inclTx, "found", true)
-	return b.ToEthLikeBlock(inclTx), nil
+	return adaptBlock(b, inclTx), nil
 }
 
 func (e *EthAPI) blockByID(id any) *eetypes.Block {
@@ -109,6 +80,46 @@ func (e *EthAPI) blockByID(id any) *eetypes.Block {
 		return e.blockStore.BlockByNumber(idT)
 	case eth.BlockLabel:
 		return e.blockStore.BlockByLabel(idT)
+	case string:
+		return e.blockStore.BlockByLabel(eth.BlockLabel(idT))
+	default:
+		return nil
 	}
-	return nil
+}
+
+// This trick is played by the eth rpc server too. Instead of constructing
+// an actual eth block, simply create a map with the right keys so the client
+// can unmarshal it into a block
+func adaptBlock(b *eetypes.Block, inclTx bool) map[string]any {
+	result := map[string]any{
+		// These are the ones that make sense to polymer.
+		"parentHash": b.ParentBlockHash,
+		"stateRoot":  common.BytesToHash(b.Header.AppHash),
+		"number":     (*hexutil.Big)(big.NewInt(b.Height())),
+		"gasLimit":   b.GasLimit,
+		"mixHash":    b.PrevRandao,
+		"timestamp":  hexutil.Uint64(b.Header.Time),
+		"hash":       b.Hash(),
+
+		// these are required fields that need to be part of the header or
+		// the eth client will complain during unmarshalling
+		"sha3Uncles":      ethtypes.EmptyUncleHash,
+		"receiptsRoot":    ethtypes.EmptyReceiptsHash,
+		"baseFeePerGas":   (*hexutil.Big)(common.Big0),
+		"difficulty":      (*hexutil.Big)(common.Big0),
+		"extraData":       make([]byte, 0),
+		"gasUsed":         hexutil.Uint64(0),
+		"logsBloom":       ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
+		"withdrawalsRoot": ethtypes.EmptyWithdrawalsHash,
+		"withdrawals":     b.Withdrawals,
+	}
+
+	txs, root := b.Transactions()
+	if inclTx {
+		result["transactionsRoot"] = root
+		result["transactions"] = txs
+	} else {
+		result["transactionsRoot"] = root
+	}
+	return result
 }

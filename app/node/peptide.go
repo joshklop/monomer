@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log"
 	"math/big"
@@ -72,7 +73,6 @@ func NewPeptideNode(
 	chainApp *peptide.PeptideApp,
 	clientCreator AbciClientCreator,
 	genesis *PeptideGenesis,
-	enabledApis server.ApiEnabledMask,
 	logger server.Logger,
 ) *PeptideNode {
 	bs := store.NewBlockStore(bsdb)
@@ -87,7 +87,7 @@ func NewPeptideNode(
 	)
 
 	config := rpcee.DefaultConfig(eeEndpoint.Host)
-	eeServer := rpcee.NewEeRpcServer(config, node.getExecutionEngineAPIs(enabledApis, logger), logger)
+	eeServer := rpcee.NewEeRpcServer(config, node.getExecutionEngineAPIs(logger), logger)
 
 	node.cometServer = cometServer
 	node.cometRpcServer = cometRpcServer
@@ -98,14 +98,18 @@ func NewPeptideNode(
 
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
-func (p *PeptideNode) getExecutionEngineAPIs(enabledApis server.ApiEnabledMask, logger server.Logger) []ethrpc.API {
+func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API {
+	var chainID *hexutil.Big
+	if err := chainID.UnmarshalText([]byte(p.chainApp.ChainId)); err != nil {
+		panic(fmt.Errorf("unmarshal chain ID: %v", err))
+	}
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
 			Service:   engine.NewEngineAPI(p, p.bs, p.ps, logger.With("module", "engine")),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p.bs, p, p.chainApp.ChainId, logger.With("module", "eth")),
+			Service:   engine.NewEthAPI(p.bs, p, chainID),
 		}, {
 			Namespace: "pep",
 			Service:   engine.NewPeptideAPI(p.bs, logger.With("module", "peptide")),
@@ -131,7 +135,6 @@ func NewPeptideNodeFromConfig(
 		app,
 		NewLocalClient,
 		genesis,
-		config.Apis,
 		config.Logger,
 	), nil
 }
@@ -144,7 +147,7 @@ func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (
 		eth.SystemConfig{},
 		0,
 		// TODO add l1 parent hash from genesis
-		eetypes.NewBlockInfo(genesis.L1.Hash, eetypes.HashOfEmptyHash, genesis.L1.Number, uint64(genesis.GenesisTime.Unix())),
+		eetypes.NewBlockInfo(genesis.L1.Hash, sha256.Sum256([]byte{}), genesis.L1.Number, uint64(genesis.GenesisTime.Unix())),
 		0,
 	)
 	if err != nil {
@@ -674,7 +677,7 @@ func (cs *PeptideNode) findParentHash() common.Hash {
 		return lastBlock.Hash()
 	}
 	// TODO: handle cases where non-genesis block is missing
-	return eetypes.ZeroHash
+	return common.Hash{}
 }
 
 // sealBlock finishes building current L2 block from currentHeader, L2 txs in mempool, and L1 txs from

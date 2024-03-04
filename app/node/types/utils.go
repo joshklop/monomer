@@ -23,7 +23,7 @@ var (
 
 // Verifies HeadBlockHash is empty
 func IsForkchoiceStateEmpty(state *eth.ForkchoiceState) bool {
-	return bytes.Equal(state.HeadBlockHash[:], ZeroHash[:])
+	return bytes.Equal(state.HeadBlockHash[:], (common.Hash{}).Bytes())
 }
 
 func HasPayloadAttributes(attrs *eth.PayloadAttributes) bool {

@@ -28,17 +28,6 @@ var (
 	}
 )
 
-type ApiEnabledMask uint64
-
-func EnableAllApis() ApiEnabledMask {
-	return ^ApiEnabledMask(0)
-}
-
-const (
-// PeptideApiEnabled = 1 << 1
-// EthApiEnabled = 1 << 2
-)
-
 const (
 	AppStateStore = "app"
 	BlockStore    = "block"
@@ -90,7 +79,6 @@ type Config struct {
 	Output                  *os.File
 	BlockTime               time.Duration
 	PrometheusRetentionTime int64
-	Apis                    ApiEnabledMask
 	BlocksInStore           int64
 	RollbackBlocks          int64
 	RollbackStore           string

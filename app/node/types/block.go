@@ -1,7 +1,6 @@
 package types
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"math/big"
 
@@ -14,15 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
-var (
-	EmptyBloom      = types.Bloom(make([]byte, types.BloomByteLength))
-	EmptyExtra      = make([]byte, 0)
-	HashOfEmptyHash = sha256.Sum256([]byte{})
-	ZeroHash        = common.Hash{}
-)
-
-type Bytes []byte
-
 type Header struct {
 	ChainID string `json:"chain_id"`
 	Height  int64  `json:"height"`
@@ -32,19 +22,19 @@ type Header struct {
 	LastBlockHash []byte `json:"last_block_hash"`
 
 	// hashes of block data
-	LastCommitHash Bytes `json:"last_commit_hash"` // commit from validators from the last block
-	DataHash       Bytes `json:"data_hash"`        // transactions
+	LastCommitHash []byte `json:"last_commit_hash"` // commit from validators from the last block
+	DataHash       []byte `json:"data_hash"`        // transactions
 
 	// hashes from the app output from the prev block
-	ValidatorsHash     Bytes `json:"validators_hash"`      // validators for the current block
-	NextValidatorsHash Bytes `json:"next_validators_hash"` // validators for the next block
-	ConsensusHash      Bytes `json:"consensus_hash"`       // consensus params for current block
-	AppHash            Bytes `json:"app_hash"`             // state after txs from the previous block
+	ValidatorsHash     []byte `json:"validators_hash"`      // validators for the current block
+	NextValidatorsHash []byte `json:"next_validators_hash"` // validators for the next block
+	ConsensusHash      []byte `json:"consensus_hash"`       // consensus params for current block
+	AppHash            []byte `json:"app_hash"`             // state after txs from the previous block
 	// root hash of all results from the txs from the previous block
-	LastResultsHash Bytes `json:"last_results_hash"`
+	LastResultsHash []byte `json:"last_results_hash"`
 
 	// consensus info
-	EvidenceHash Bytes `json:"evidence_hash"` // evidence included in the block
+	EvidenceHash []byte `json:"evidence_hash"` // evidence included in the block
 }
 
 func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
@@ -79,7 +69,7 @@ func (b *Block) Height() int64 {
 
 // Hash returns a unique hash of the block, used as the block identifier
 func (b *Block) Hash() common.Hash {
-	if b.BlockHash == ZeroHash {
+	if b.BlockHash == (common.Hash{}) {
 		header := types.Header{}
 		header.ParentHash = b.ParentHash()
 		header.Root = common.BytesToHash(b.Header.AppHash)
@@ -126,41 +116,4 @@ func (b *Block) Transactions() (types.Transactions, common.Hash) {
 		txs = append(txs, tx)
 	}
 	return txs, types.DeriveSha(txs, trie.NewStackTrie(nil))
-}
-
-// This trick is played by the eth rpc server too. Instead of constructing
-// an actual eth block, simply create a map with the right keys so the client
-// can unmarshal it into a block
-func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
-	result := map[string]any{
-		// These are the ones that make sense to polymer.
-		"parentHash": b.ParentHash(),
-		"stateRoot":  common.BytesToHash(b.Header.AppHash),
-		"number":     (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":   b.GasLimit,
-		"mixHash":    b.PrevRandao,
-		"timestamp":  hexutil.Uint64(b.Header.Time),
-		"hash":       b.Hash(),
-
-		// these are required fields that need to be part of the header or
-		// the eth client will complain during unmarshalling
-		"sha3Uncles":      types.EmptyUncleHash,
-		"receiptsRoot":    types.EmptyReceiptsHash,
-		"baseFeePerGas":   (*hexutil.Big)(common.Big0),
-		"difficulty":      (*hexutil.Big)(common.Big0),
-		"extraData":       EmptyExtra,
-		"gasUsed":         hexutil.Uint64(0),
-		"logsBloom":       EmptyBloom,
-		"withdrawalsRoot": types.EmptyWithdrawalsHash,
-		"withdrawals":     b.Withdrawals,
-	}
-
-	if inclTx {
-		txs, hash := b.Transactions()
-		result["transactionsRoot"] = hash
-		result["transactions"] = txs
-	} else {
-		result["transactionsRoot"] = types.EmptyTxsHash
-	}
-	return result
 }

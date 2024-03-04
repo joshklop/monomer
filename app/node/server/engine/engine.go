@@ -51,7 +51,7 @@ func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash common
 	e.logger.Debug("engineAPIserver.rollback", "head", head.Height(), "safe", safeHash, "finalized", finalizedHash)
 
 	getBlock := func(label eth.BlockLabel, hash common.Hash) *eetypes.Block {
-		if hash != eetypes.ZeroHash {
+		if hash != (common.Hash{}) {
 			return e.blockStore.BlockByHash(hash)
 		}
 		return e.blockStore.BlockByLabel(label)
@@ -127,7 +127,7 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	e.logger.Info("updating unsafe/latest block", "hash", fcs.SafeBlockHash, "height", headBlock.Height())
 	e.node.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash)
 
-	if fcs.SafeBlockHash != eetypes.ZeroHash {
+	if fcs.SafeBlockHash != (common.Hash{}) {
 		e.logger.Info("updating safe block", "hash", fcs.SafeBlockHash)
 		if err := e.node.UpdateLabel(eth.Safe, fcs.SafeBlockHash); err != nil {
 			e.logger.Error("invalid safe head", "err", err)
@@ -136,7 +136,7 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	}
 
 	// update finalized block head
-	if fcs.FinalizedBlockHash != eetypes.ZeroHash {
+	if fcs.FinalizedBlockHash != (common.Hash{}) {
 		e.logger.Info("updating finalized block", "hash", fcs.FinalizedBlockHash)
 		if err := e.node.UpdateLabel(eth.Finalized, fcs.FinalizedBlockHash); err != nil {
 			e.logger.Error("invalid finalized head", "err", err)
