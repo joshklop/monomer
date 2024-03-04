@@ -106,7 +106,7 @@ func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API 
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
-			Service:   engine.NewEngineAPI(p, p.bs, p.ps, logger.With("module", "engine")),
+			Service:   engine.NewEngineAPI(p, p.bs, p.ps),
 		}, {
 			Namespace: "eth",
 			Service:   engine.NewEthAPI(p.bs, p, chainID),
