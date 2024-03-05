@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
@@ -16,8 +17,6 @@ import (
 
 type Node interface {
 	LastBlockHeight() int64
-	// SavePayload saves the payload by its ID if it's not already in payload cache.
-	// Also update the latest Payload if this is a new payload
 	// The latest unsafe block hash
 	//
 	// The latest unsafe block refers to sealed blocks, not the one that's being built on
@@ -75,13 +74,10 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
+	// We expect to have the head block in the db already. What if we don't? How will we receive it?
 	headBlock := e.blockStore.BlockByHash(fcs.HeadBlockHash)
 	if headBlock == nil {
-		return nil, engine.InvalidForkChoiceState.With(errors.New("head block not found"))
-	}
-
-	if eetypes.IsForkchoiceStateEmpty(&fcs) {
-		return nil, engine.InvalidForkChoiceState.With(fmt.Errorf("forkchoice state is empty"))
+		return nil, engine.InvalidForkChoiceState.With(fmt.Errorf("head block: %w", ethereum.NotFound))
 	}
 
 	// update labeled blocks
@@ -90,14 +86,19 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	// When OpNode issues a FCU with a head block that's different than App's view, it means a reorg happened.
 	// In this case, we need to rollback App and BlockStore to the head block's height-1.
 	if headBlock.Height() != e.node.LastBlockHeight() {
+		// NOTE: with a single centralized sequencer, a reorg can only take us backwards.
 		if err := e.rollback(headBlock, fcs.SafeBlockHash, fcs.FinalizedBlockHash); err != nil {
 			return nil, engine.InvalidForkChoiceState.With(err)
 		}
 		reorg = true
 	}
 
+	// TODO I don't think using InvalidForkChoiceState everywhere makes sense.
+
 	// update canonical block head
-	e.node.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash)
+	if err := e.node.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash); err != nil {
+		return nil, engine.InvalidForkChoiceState.With(err)
+	}
 
 	if fcs.SafeBlockHash != (common.Hash{}) {
 		if err := e.node.UpdateLabel(eth.Safe, fcs.SafeBlockHash); err != nil {
@@ -120,7 +121,9 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 			return nil, engine.InvalidPayloadAttributes.With(err)
 		}
 		// TODO: handle error of SavePayload
-		e.payloadStore.Add(payload)
+		if err := e.payloadStore.Add(payload); err != nil {
+			return nil, engine.InvalidPayloadAttributes.With(err) // TODO better error
+		}
 		// TODO: use one method for both cases: payload.Valid()
 		return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, payloadId), nil
 	}
@@ -133,7 +136,6 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 		if err != nil {
 			return nil, engine.InvalidPayloadAttributes.With(err)
 		}
-		e.payloadStore.Get(*payloadId)
 		return payload.Valid(payloadId), nil
 	}
 

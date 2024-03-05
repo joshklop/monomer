@@ -21,11 +21,6 @@ var (
 	UnknownPayload = engine.UnknownPayload
 )
 
-// Verifies HeadBlockHash is empty
-func IsForkchoiceStateEmpty(state *eth.ForkchoiceState) bool {
-	return bytes.Equal(state.HeadBlockHash[:], (common.Hash{}).Bytes())
-}
-
 func HasPayloadAttributes(attrs *eth.PayloadAttributes) bool {
 	return attrs.Timestamp != 0 && attrs.Transactions != nil && len(attrs.Transactions) != 0
 }
