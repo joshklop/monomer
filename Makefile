@@ -1,11 +1,7 @@
-.PHONY: peptide
-peptide:
-	go build -o peptide ./cmd/peptide/
-
-.PHONY: pepctl
-pepctl:
-	go build -o pepctl ./cmd/pepctl/
+.PHONY: monomer
+monomer:
+	@go build -o monomer ./cmd/monomer/
 
 .PHONY: clean
 clean:
-	rm ./peptide ./pepctl
+	@rm ./monomer

@@ -72,12 +72,11 @@ func NewPeptideNode(
 	eeEndpoint *server.Endpoint,
 	chainApp *peptide.PeptideApp,
 	clientCreator AbciClientCreator,
-	genesis *PeptideGenesis,
 	logger server.Logger,
 ) *PeptideNode {
 	bs := store.NewBlockStore(bsdb)
 	txstore := txstore.NewTxStore(txstoreDb, logger)
-	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, genesis, logger.With("module", "node"))
+	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, logger.With("module", "node"))
 	cometServer, cometRpcServer := cometbft_rpc.NewCometRpcServer(
 		node,
 		appEndpoint.FullAddress(),
@@ -99,9 +98,9 @@ func NewPeptideNode(
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
 func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API {
-	var chainID *hexutil.Big
-	if err := chainID.UnmarshalText([]byte(p.chainApp.ChainId)); err != nil {
-		panic(fmt.Errorf("unmarshal chain ID: %v", err))
+	bigChainID, ok := new(big.Int).SetString(p.chainApp.ChainId, 10)
+	if !ok {
+		panic("parse big.Int chain id")
 	}
 	return []ethrpc.API{
 		{
@@ -109,7 +108,7 @@ func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API 
 			Service:   engine.NewEngineAPI(p, p.bs, p.ps),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p.bs, p, chainID),
+			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(bigChainID)),
 		}, {
 			Namespace: "pep",
 			Service:   engine.NewPeptideAPI(p.bs, logger.With("module", "peptide")),
@@ -122,7 +121,6 @@ func NewPeptideNodeFromConfig(
 	bsdb tmdb.DB,
 	txstoreDb tmdb.DB,
 	mempooldb tmdb.DB,
-	genesis *PeptideGenesis,
 	config *server.Config,
 ) (*PeptideNode, error) {
 	// TODO: enable abci servers too if configured
@@ -134,7 +132,6 @@ func NewPeptideNodeFromConfig(
 		&config.PeptideEngineServerRpc,
 		app,
 		NewLocalClient,
-		genesis,
 		config.Logger,
 	), nil
 }
@@ -177,7 +174,6 @@ func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (
 
 // PeptideNode implements all RPC methods defined in RouteMap.
 type PeptideNode struct {
-	genesis       *PeptideGenesis
 	client        abciclient.Client
 	clientCreator AbciClientCreator
 	chainApp      *peptide.PeptideApp
@@ -235,10 +231,9 @@ func (cs *PeptideNode) EngineServerAddress() net.Addr {
 var _ service.Service = (*PeptideNode)(nil)
 
 func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs store.BlockStore,
-	txstore txstore.TxStore, mempoolStorage tmdb.DB, genesis *PeptideGenesis, logger tmlog.Logger,
+	txstore txstore.TxStore, mempoolStorage tmdb.DB, logger tmlog.Logger,
 ) *PeptideNode {
 	cs := &PeptideNode{
-		genesis:       genesis,
 		clientCreator: clientCreator,
 		chainApp:      chainApp,
 		logger:        logger,
@@ -300,7 +295,7 @@ func (cs *PeptideNode) resume() {
 		EvidenceHash:       lastBlock.Header.EvidenceHash,
 	}
 
-	if err := cs.chainApp.Resume(header, cs.genesis.AppState); err != nil {
+	if err := cs.chainApp.Resume(header); err != nil {
 		panic(err)
 	}
 	cs.latestBlock = lastBlock
@@ -476,10 +471,6 @@ func (cs *PeptideNode) GetTxByHash(hash []byte) (*abcitypes.TxResult, error) {
 	return cs.txstore.Get(hash)
 }
 
-func (cs *PeptideNode) GetChainID() string {
-	return cs.genesis.ChainID
-}
-
 func (cs *PeptideNode) SearchTx(ctx context.Context, q *cmtquery.Query) ([]*abcitypes.TxResult, error) {
 	return cs.txstore.Search(ctx, q)
 }
@@ -494,7 +485,7 @@ func (cs *PeptideNode) getBlockByNumber(number int64) *eetypes.Block {
 	case ethrpc.FinalizedBlockNumber:
 		return cs.bs.BlockByLabel(eth.Finalized)
 	case ethrpc.EarliestBlockNumber:
-		return cs.bs.BlockByHash(cs.genesis.GenesisBlock.Hash)
+		return cs.bs.BlockByNumber(0) // TODO is genesis block number always zero?
 	default:
 		return cs.bs.BlockByNumber(number)
 	}

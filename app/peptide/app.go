@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	tmdb "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
-	tmlog "github.com/cometbft/cometbft/libs/log"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	tmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -75,39 +73,18 @@ var DefaultConsensusParams = &tmproto.ConsensusParams{
 }
 
 type PeptideAppOptions struct {
-	DB                  tmdb.DB
-	HomePath            string
 	ChainID             string
-	IAVLDisableFastNode bool
-	IAVLLazyLoading     bool
 }
 
-func New(chainID string, dir string, db tmdb.DB, app Application, logger tmlog.Logger) *PeptideApp {
-	return NewWithOptions(PeptideAppOptions{
-		ChainID:  chainID,
-		HomePath: dir,
-		DB:       db,
-	}, app, logger)
-}
-
-// New creates application instance with in-memory database and disabled logging.
-func NewWithOptions(options PeptideAppOptions, app Application, logger tmlog.Logger) *PeptideApp {
-	logger.Info("new app with options",
-		"chain_id", options.ChainID,
-		"home_path", options.HomePath,
-		"iavl_lazy_loading", options.IAVLLazyLoading,
-		"iavl_disable_fast_node", options.IAVLDisableFastNode,
-	)
-
-	newPeptideApp := &PeptideApp{
+func New(chainID string, app Application) *PeptideApp {
+	return &PeptideApp{
 		App:                  app,
 		ValSet:               &tmtypes.ValidatorSet{},
-		ChainId:              options.ChainID,
+		ChainId:              chainID,
 		BondDenom:            sdk.DefaultBondDenom,
 		VotingPowerReduction: sdk.DefaultPowerReduction,
 	}
 
-	return newPeptideApp
 }
 
 // ImportAppStateAndValidators imports the application state, init height, and validators from ExportedApp defined by
@@ -180,7 +157,7 @@ func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time
 
 // Resume the normal activity after a (chain) restart. It sets the required pointers according to the
 // last known header (that comes from the block store) and calls into the base app's BeginBlock()
-func (a *PeptideApp) Resume(lastHeader *tmproto.Header, genesisState []byte) error {
+func (a *PeptideApp) Resume(lastHeader *tmproto.Header) error {
 	a.lastHeader = lastHeader
 	a.currentHeader = &tmproto.Header{
 		Height:             a.App.Info(abci.RequestInfo{}).LastBlockHeight + 1,

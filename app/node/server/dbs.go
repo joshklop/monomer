@@ -1,28 +1,19 @@
 package server
 
 import (
-	"log"
+	"fmt"
 	"os"
-	"path/filepath"
 
 	tmdb "github.com/cometbft/cometbft-db"
 )
 
-func OpenDB(name string, config *Config) tmdb.DB {
-	dataDir := filepath.Join(config.HomeDir, "data")
-	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		log.Panicf("could not mkdir, homedir: %s, name: %s, err: %v", config.HomeDir, name, err)
+func OpenDB(name, dir string) (tmdb.DB, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("mkdir all: %v", err)
 	}
-	db, err := tmdb.NewDB(name, config.DbBackend, dataDir)
+	db, err := tmdb.NewDB(name, tmdb.GoLevelDBBackend, dir)
 	if err != nil {
-		log.Panicf("could not open db, homedir: %s, name: %s, err: %v", config.HomeDir, name, err)
+		return nil, fmt.Errorf("new db: %v", err)
 	}
-	return db
-}
-
-func OpenDBextended(name string, home string, dbtype DbBackendType) tmdb.DB {
-	return OpenDB(name, &Config{
-		HomeDir:   home,
-		DbBackend: dbtype,
-	})
+	return db, nil
 }
