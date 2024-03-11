@@ -5,6 +5,7 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/polymerdao/monomer/app/peptide/store"
+	ethengine "github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
@@ -48,11 +49,11 @@ func TestForkchoiceUpdatedV3(t *testing.T) {
 	payloadStore := payloadstore.NewPayloadStore()
 	api := engine.NewEngineAPI(newMockNode(), blockStore, payloadStore)
 
-	// TODO
-	_, _ = api.ForkchoiceUpdatedV3(eth.ForkchoiceState{
+	result, err := api.ForkchoiceUpdatedV3(eth.ForkchoiceState{
 		HeadBlockHash: common.Hash{},
 		SafeBlockHash: common.Hash{},
 		FinalizedBlockHash: common.Hash{},
 	}, eth.PayloadAttributes{})
-	//require.NoError(t, err)
+	require.ErrorContains(t, err, ethengine.InvalidForkChoiceState.Error())
+	require.Nil(t, result)
 }

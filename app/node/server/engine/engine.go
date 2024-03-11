@@ -74,7 +74,6 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	// We expect to have the head block in the db already. What if we don't? How will we receive it?
 	headBlock := e.blockStore.BlockByHash(fcs.HeadBlockHash)
 	if headBlock == nil {
 		return nil, engine.InvalidForkChoiceState.With(fmt.Errorf("head block: %w", ethereum.NotFound))

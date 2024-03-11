@@ -128,50 +128,16 @@ func TestGetBlockByHash(t *testing.T) {
 
 	got, err := api.GetBlockByHash(b.BlockHash, false)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{
-		"parentHash":       b.ParentBlockHash,
-		"stateRoot":        common.BytesToHash(b.Header.AppHash),
-		"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":         b.GasLimit,
-		"mixHash":          b.PrevRandao,
-		"timestamp":        hexutil.Uint64(b.Header.Time),
-		"hash":             b.Hash(),
-		"sha3Uncles":       ethtypes.EmptyUncleHash,
-		"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-		"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-		"difficulty":       (*hexutil.Big)(common.Big0),
-		"extraData":        make([]byte, 0),
-		"gasUsed":          hexutil.Uint64(0),
-		"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-		"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-		"withdrawals":      b.Withdrawals,
-		"transactionsRoot": ethtypes.EmptyTxsHash,
-	}, got)
+	require.Equal(t, b.ToEthLikeBlock(false), got)
 
 	got, err = api.GetBlockByHash(b.BlockHash, true)
 	require.NoError(t, err)
-	txs, root := b.Transactions()
+	txs, _ := b.Transactions()
 	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
 	delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
-	require.Equal(t, map[string]any{
-		"parentHash":       b.ParentBlockHash,
-		"stateRoot":        common.BytesToHash(b.Header.AppHash),
-		"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":         b.GasLimit,
-		"mixHash":          b.PrevRandao,
-		"timestamp":        hexutil.Uint64(b.Header.Time),
-		"hash":             b.Hash(),
-		"sha3Uncles":       ethtypes.EmptyUncleHash,
-		"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-		"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-		"difficulty":       (*hexutil.Big)(common.Big0),
-		"extraData":        make([]byte, 0),
-		"gasUsed":          hexutil.Uint64(0),
-		"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-		"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-		"withdrawals":      b.Withdrawals,
-		"transactionsRoot": root,
-	}, got)
+	want := b.ToEthLikeBlock(true)
+	delete(want, "transactions")
+	require.Equal(t, want, got)
 }
 
 func TestGetBlockByNumber(t *testing.T) {
@@ -199,50 +165,16 @@ func TestGetBlockByNumber(t *testing.T) {
 
 	got, err := api.GetBlockByNumber(b.Height(), false)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{
-		"parentHash":       b.ParentBlockHash,
-		"stateRoot":        common.BytesToHash(b.Header.AppHash),
-		"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":         b.GasLimit,
-		"mixHash":          b.PrevRandao,
-		"timestamp":        hexutil.Uint64(b.Header.Time),
-		"hash":             b.Hash(),
-		"sha3Uncles":       ethtypes.EmptyUncleHash,
-		"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-		"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-		"difficulty":       (*hexutil.Big)(common.Big0),
-		"extraData":        make([]byte, 0),
-		"gasUsed":          hexutil.Uint64(0),
-		"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-		"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-		"withdrawals":      b.Withdrawals,
-		"transactionsRoot": ethtypes.EmptyTxsHash,
-	}, got)
+	require.Equal(t, b.ToEthLikeBlock(false), got)
 
 	got, err = api.GetBlockByNumber(b.Height(), true)
 	require.NoError(t, err)
-	txs, root := b.Transactions()
+	txs, _ := b.Transactions()
 	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
 	delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
-	require.Equal(t, map[string]any{
-		"parentHash":       b.ParentBlockHash,
-		"stateRoot":        common.BytesToHash(b.Header.AppHash),
-		"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":         b.GasLimit,
-		"mixHash":          b.PrevRandao,
-		"timestamp":        hexutil.Uint64(b.Header.Time),
-		"hash":             b.Hash(),
-		"sha3Uncles":       ethtypes.EmptyUncleHash,
-		"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-		"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-		"difficulty":       (*hexutil.Big)(common.Big0),
-		"extraData":        make([]byte, 0),
-		"gasUsed":          hexutil.Uint64(0),
-		"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-		"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-		"withdrawals":      b.Withdrawals,
-		"transactionsRoot": root,
-	}, got)
+	want := b.ToEthLikeBlock(true)
+	delete(want, "transactions")
+	require.Equal(t, want, got)
 }
 
 func TestGetBlockWithNilID(t *testing.T) {
@@ -302,49 +234,15 @@ func TestGetBlockByLabel(t *testing.T) {
 
 		got, err := api.GetBlockByNumber(label, false)
 		require.NoError(t, err)
-		require.Equal(t, map[string]any{
-			"parentHash":       b.ParentBlockHash,
-			"stateRoot":        common.BytesToHash(b.Header.AppHash),
-			"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-			"gasLimit":         b.GasLimit,
-			"mixHash":          b.PrevRandao,
-			"timestamp":        hexutil.Uint64(b.Header.Time),
-			"hash":             b.Hash(),
-			"sha3Uncles":       ethtypes.EmptyUncleHash,
-			"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-			"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-			"difficulty":       (*hexutil.Big)(common.Big0),
-			"extraData":        make([]byte, 0),
-			"gasUsed":          hexutil.Uint64(0),
-			"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-			"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-			"withdrawals":      b.Withdrawals,
-			"transactionsRoot": ethtypes.EmptyTxsHash,
-		}, got)
+		require.Equal(t, b.ToEthLikeBlock(false), got)
 
 		got, err = api.GetBlockByNumber(label, true)
 		require.NoError(t, err)
-		txs, root := b.Transactions()
+		txs, _ := b.Transactions()
 		require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
 		delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
-		require.Equal(t, map[string]any{
-			"parentHash":       b.ParentBlockHash,
-			"stateRoot":        common.BytesToHash(b.Header.AppHash),
-			"number":           (*hexutil.Big)(big.NewInt(b.Height())),
-			"gasLimit":         b.GasLimit,
-			"mixHash":          b.PrevRandao,
-			"timestamp":        hexutil.Uint64(b.Header.Time),
-			"hash":             b.Hash(),
-			"sha3Uncles":       ethtypes.EmptyUncleHash,
-			"receiptsRoot":     ethtypes.EmptyReceiptsHash,
-			"baseFeePerGas":    (*hexutil.Big)(common.Big0),
-			"difficulty":       (*hexutil.Big)(common.Big0),
-			"extraData":        make([]byte, 0),
-			"gasUsed":          hexutil.Uint64(0),
-			"logsBloom":        ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-			"withdrawalsRoot":  ethtypes.EmptyWithdrawalsHash,
-			"withdrawals":      b.Withdrawals,
-			"transactionsRoot": root,
-		}, got)
+		want := b.ToEthLikeBlock(true)
+		delete(want, "transactions")
+		require.Equal(t, want, got)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 )
@@ -59,7 +58,7 @@ func (e *EthAPI) GetBlockByHash(hash common.Hash, inclTx bool) (map[string]any, 
 	if b == nil {
 		return nil, errors.New("block not found")
 	}
-	return adaptBlock(b, inclTx), nil
+	return b.ToEthLikeBlock(inclTx), nil
 }
 
 func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
@@ -67,7 +66,7 @@ func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
 	if b == nil {
 		return nil, errors.New("block not found") // TODO: do we need a special error?
 	}
-	return adaptBlock(b, inclTx), nil
+	return b.ToEthLikeBlock(inclTx), nil
 }
 
 func (e *EthAPI) blockByID(id any) *eetypes.Block {
@@ -85,41 +84,4 @@ func (e *EthAPI) blockByID(id any) *eetypes.Block {
 	default:
 		return nil
 	}
-}
-
-// This trick is played by the eth rpc server too. Instead of constructing
-// an actual eth block, simply create a map with the right keys so the client
-// can unmarshal it into a block
-func adaptBlock(b *eetypes.Block, inclTx bool) map[string]any {
-	result := map[string]any{
-		// These are the ones that make sense to polymer.
-		"parentHash": b.ParentBlockHash,
-		"stateRoot":  common.BytesToHash(b.Header.AppHash),
-		"number":     (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":   b.GasLimit,
-		"mixHash":    b.PrevRandao,
-		"timestamp":  hexutil.Uint64(b.Header.Time),
-		"hash":       b.Hash(),
-
-		// these are required fields that need to be part of the header or
-		// the eth client will complain during unmarshalling
-		"sha3Uncles":      ethtypes.EmptyUncleHash,
-		"receiptsRoot":    ethtypes.EmptyReceiptsHash,
-		"baseFeePerGas":   (*hexutil.Big)(common.Big0),
-		"difficulty":      (*hexutil.Big)(common.Big0),
-		"extraData":       make([]byte, 0),
-		"gasUsed":         hexutil.Uint64(0),
-		"logsBloom":       ethtypes.Bloom(make([]byte, ethtypes.BloomByteLength)),
-		"withdrawalsRoot": ethtypes.EmptyWithdrawalsHash,
-		"withdrawals":     b.Withdrawals,
-	}
-
-	txs, root := b.Transactions()
-	if inclTx {
-		result["transactionsRoot"] = root
-		result["transactions"] = txs
-	} else {
-		result["transactionsRoot"] = root
-	}
-	return result
 }

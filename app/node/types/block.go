@@ -61,6 +61,7 @@ type Block struct {
 	BlockHash       common.Hash        `json:"hash"`
 	PrevRandao      eth.Bytes32        `json:"prevRandao"`
 	Withdrawals     *types.Withdrawals `json:"withdrawals,omitempty"`
+	ParentBeaconBlockRoot *common.Hash       `json:"parentBeaconBlockRoot,omitempty"`
 }
 
 func (b *Block) Height() int64 {
@@ -90,6 +91,48 @@ func (b *Block) Hash() common.Hash {
 		copy(b.BlockHash[:], hash[:])
 	}
 	return b.BlockHash
+}
+// This trick is played by the eth rpc server too. Instead of constructing
+// an actual eth block, simply create a map with the right keys so the client
+// can unmarshal it into a block
+func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
+	excessBlobGas := hexutil.Uint64(0)
+	blockGasUsed := hexutil.Uint64(0)
+
+	result := map[string]any{
+		// These are the ones that make sense to polymer.
+		"parentHash": b.ParentHash(),
+		"stateRoot":  common.BytesToHash(b.Header.AppHash),
+		"number":     (*hexutil.Big)(big.NewInt(b.Height())),
+		"gasLimit":   b.GasLimit,
+		"mixHash":    b.PrevRandao,
+		"timestamp":  hexutil.Uint64(b.Header.Time),
+		"hash":       b.Hash(),
+
+		// these are required fields that need to be part of the header or
+		// the eth client will complain during unmarshalling
+		"sha3Uncles":            types.EmptyUncleHash,
+		"receiptsRoot":          types.EmptyReceiptsHash,
+		"baseFeePerGas":         (*hexutil.Big)(common.Big0),
+		"difficulty":            (*hexutil.Big)(common.Big0),
+		"extraData":             []byte{},
+		"gasUsed":               hexutil.Uint64(0),
+		"logsBloom":             types.Bloom(make([]byte, types.BloomByteLength)),
+		"withdrawalsRoot":       types.EmptyWithdrawalsHash,
+		"withdrawals":           b.Withdrawals,
+		"blobGasUsed":           &blockGasUsed,
+		"excessBlobGas":         &excessBlobGas,
+		"parentBeaconBlockRoot": b.ParentBeaconBlockRoot,
+	}
+
+	txs, root := b.Transactions()
+	if inclTx {
+		result["transactionsRoot"] = root
+		result["transactions"] = txs
+	} else {
+		result["transactionsRoot"] = root
+	}
+	return result
 }
 
 func (b *Block) ParentHash() common.Hash {
