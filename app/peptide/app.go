@@ -11,8 +11,10 @@ import (
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/joshklop/gm-monomer/app"
 	"github.com/joshklop/gm-monomer/app/params"
+	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/samber/lo"
 )
 
@@ -20,6 +22,8 @@ type Application interface {
 	abci.Application
 	RollbackToHeight(uint64) error
 }
+
+const DefaultGasLimit = 30_000_000
 
 // PeptideApp extends the ABCI-compatible App with additional op-stack L2 chain features
 type PeptideApp struct {
@@ -72,10 +76,6 @@ var DefaultConsensusParams = &tmproto.ConsensusParams{
 	},
 }
 
-type PeptideAppOptions struct {
-	ChainID             string
-}
-
 func New(chainID string, app Application) *PeptideApp {
 	return &PeptideApp{
 		App:                  app,
@@ -84,7 +84,6 @@ func New(chainID string, app Application) *PeptideApp {
 		BondDenom:            sdk.DefaultBondDenom,
 		VotingPowerReduction: sdk.DefaultPowerReduction,
 	}
-
 }
 
 // ImportAppStateAndValidators imports the application state, init height, and validators from ExportedApp defined by
@@ -131,7 +130,7 @@ func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int
 // - It triggers a call into the base app's InitChain()
 // - Commits the app state to disk so it can be persisted across executions
 // - Returns a "genesis header" with the genesis block height and app state hash
-func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time.Time) *tmproto.Header {
+func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time.Time) *eetypes.Header {
 	response := a.App.InitChain(abci.RequestInitChain{
 		ChainId:         a.ChainId,
 		ConsensusParams: DefaultConsensusParams,
@@ -145,13 +144,13 @@ func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time
 	a.App.Commit()
 
 	// use LastBlockHeight() since it might not be the same as InitialHeight.
-	return &tmproto.Header{
-		Height:             a.App.Info(abci.RequestInfo{}).LastBlockHeight,
-		ValidatorsHash:     a.ValSet.Hash(),
-		NextValidatorsHash: a.ValSet.Hash(),
-		ChainID:            a.ChainId,
-		Time:               genesisTime,
-		AppHash:            response.AppHash,
+	return &eetypes.Header{
+		Height:     a.App.Info(abci.RequestInfo{}).LastBlockHeight,
+		ParentHash: common.Hash{},
+		ChainID:    a.ChainId,
+		Time:       uint64(genesisTime.Unix()), // TODO unix or unix milli? I think comet uses UnixMilli.
+		AppHash:    response.AppHash,
+		GasLimit:   DefaultGasLimit,
 	}
 }
 
@@ -166,7 +165,9 @@ func (a *PeptideApp) Resume(lastHeader *tmproto.Header) error {
 		ChainID:            a.ChainId,
 	}
 
-	a.App.BeginBlock(abci.RequestBeginBlock{Header: *a.CurrentHeader()})
+	a.App.BeginBlock(abci.RequestBeginBlock{
+		Header: *a.CurrentHeader(),
+	})
 	return nil
 }
 
@@ -208,11 +209,6 @@ func (a *PeptideApp) OnCommit(timestamp eth.Uint64Quantity) {
 // CurrentHeader is the header that is being built, which is not committed yet
 func (a *PeptideApp) CurrentHeader() *tmproto.Header {
 	return a.currentHeader
-}
-
-// LastHeader is the header that was committed, either as a genesis block header or the latest committed block header
-func (a *PeptideApp) LastHeader() *tmproto.Header {
-	return a.lastHeader
 }
 
 // Convert a SDK context to Go context

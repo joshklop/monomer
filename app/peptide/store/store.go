@@ -22,6 +22,8 @@ type BlockStoreReader interface {
 	// Retrieves a block from the store by its label and returns it. It uses the user-provided BlockUnmarshaler
 	// callback to do unmarshal the opaque bytes into an actual block. Returns the block if found or nil otherwise.
 	BlockByLabel(label eth.BlockLabel) *eetypes.Block
+
+	HeadBlock() *eetypes.Block
 }
 
 type BlockStoreWriter interface {
@@ -80,6 +82,23 @@ func NewBlockStore(db dbm.DB) BlockStore {
 	}
 }
 
+var headKey = []byte("head")
+
+func (b *blockStore) HeadBlock() *eetypes.Block {
+	bz, err := b.db.Get(headKey)
+	if err != nil {
+		panic(err)
+	}
+	if bz == nil {
+		return nil
+	}
+	block := new(eetypes.Block)
+	if err := json.Unmarshal(bz, &block); err != nil {
+		return nil
+	}
+	return block
+}
+
 func (b *blockStore) AddBlock(block *eetypes.Block) {
 	// use batching for atomic updates
 	batch := b.db.NewBatch()
@@ -93,7 +112,10 @@ func (b *blockStore) AddBlock(block *eetypes.Block) {
 	if err := batch.Set(hashKey(hash), blockBytes); err != nil {
 		panic(err)
 	}
-	if err := batch.Set(heightKey(block.Height()), hash[:]); err != nil {
+	if err := batch.Set(heightKey(block.Header.Height), hash[:]); err != nil {
+		panic(err)
+	}
+	if err := batch.Set(headKey, blockBytes); err != nil {
 		panic(err)
 	}
 	if err := batch.WriteSync(); err != nil {

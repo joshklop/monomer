@@ -17,9 +17,9 @@ func TestSetUnsafeBlock(t *testing.T) {
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        1,
-			ParentBlockHash: common.HexToHash("0x0"),
+			ParentHash: common.HexToHash("0x0"),
+			Hash: common.HexToHash("0x1"),
 		},
-		BlockHash: common.HexToHash("0x1"),
 	}
 
 	bs.AddBlock(block)
@@ -30,7 +30,7 @@ func TestSetUnsafeBlock(t *testing.T) {
 	require.Equal(t, block, byhash)
 
 	// get by number
-	bynumber := bs.BlockByNumber(block.Height())
+	bynumber := bs.BlockByNumber(block.Header.Height)
 	require.NotNil(t, bynumber)
 	require.Equal(t, block, byhash)
 
@@ -47,9 +47,9 @@ func TestUpdateLabel(t *testing.T) {
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        1,
-			ParentBlockHash: common.HexToHash("0x0"),
+			ParentHash: common.HexToHash("0x0"),
+			Hash: common.HexToHash("0x1"),
 		},
-		BlockHash: common.HexToHash("0x1"),
 	}
 
 	bs.AddBlock(block)
@@ -70,9 +70,9 @@ func TestUpdateLabel(t *testing.T) {
 	block2 := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        2,
-			ParentBlockHash: common.HexToHash("0x1"),
+			ParentHash: common.HexToHash("0x1"),
+			Hash: common.HexToHash("0x2"),
 		},
-		BlockHash: common.HexToHash("0x2"),
 	}
 	bs.AddBlock(block2)
 	bs.UpdateLabel(eth.Unsafe, block2.Hash())
@@ -90,9 +90,9 @@ func TestMultipleBlocks(t *testing.T) {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
 				Height:        i,
-				ParentBlockHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
+				ParentHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
+				Hash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 			},
-			BlockHash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 		})
 	}
 
@@ -105,7 +105,7 @@ func TestMultipleBlocks(t *testing.T) {
 	}
 
 	for _, block := range blocks {
-		require.Equal(t, block, bs.BlockByNumber(block.Height()))
+		require.Equal(t, block, bs.BlockByNumber(block.Header.Height))
 	}
 }
 
@@ -131,9 +131,9 @@ func TestRollback(t *testing.T) {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
 				Height:        i,
-				ParentBlockHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
+				ParentHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
+				Hash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 			},
-			BlockHash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 		})
 	}
 
@@ -144,11 +144,11 @@ func TestRollback(t *testing.T) {
 	require.NoError(t, bs.RollbackToHeight(5))
 
 	for _, block := range blocks {
-		if block.Height() > 5 {
-			require.Nil(t, bs.BlockByNumber(block.Height()))
+		if block.Header.Height > 5 {
+			require.Nil(t, bs.BlockByNumber(block.Header.Height))
 			require.Nil(t, bs.BlockByHash(block.Hash()))
 		} else {
-			require.NotNil(t, bs.BlockByNumber(block.Height()))
+			require.NotNil(t, bs.BlockByNumber(block.Header.Height))
 			require.NotNil(t, bs.BlockByHash(block.Hash()))
 		}
 	}

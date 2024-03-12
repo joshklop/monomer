@@ -71,17 +71,17 @@ func TestGetBalance(t *testing.T) {
 	blockStore := store.NewBlockStore(db)
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
-			Height:  0,
-			ChainID: chainID.ToInt().String(),
+			Height:    0,
+			ChainID:   chainID.ToInt().String(),
+			Hash: common.Hash{0},
 		},
-		BlockHash: common.Hash{0},
 	})
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
-			Height:  1,
-			ChainID: chainID.ToInt().String(),
+			Height:    1,
+			ChainID:   chainID.ToInt().String(),
+			Hash: common.Hash{1},
 		},
-		BlockHash: common.Hash{1},
 	})
 	// TODO we should technically have to update the block label here to
 	// make the above blocks part of the canonical chain. The fact that this test passes
@@ -111,29 +111,26 @@ func TestGetBlockByHash(t *testing.T) {
 	blockStore := store.NewBlockStore(db)
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:  1,
-			ChainID: chainID.ToInt().String(),
-			AppHash: []byte{1},
-			Time:    4,
-			ParentBlockHash: common.Hash{2},
+			Height:          1,
+			ChainID:         chainID.ToInt().String(),
+			AppHash:         []byte{1},
+			Time:            4,
+			ParentHash: common.Hash{2},
+			Hash:       common.Hash{1},
 		},
-		Txs:             bfttypes.Txs{bfttypes.Tx([]byte{1})},
-		BlockHash:       common.Hash{1},
-		PrevRandao:      eth.Bytes32([]byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-		Withdrawals:     &ethtypes.Withdrawals{},
+		Txs: bfttypes.Txs{bfttypes.Tx([]byte{1})},
 	}
 	blockStore.AddBlock(b)
 	register := newMockRegister()
 	api := engine.NewEthAPI(blockStore, register, &chainID)
 
-	got, err := api.GetBlockByHash(b.BlockHash, false)
+	got, err := api.GetBlockByHash(b.Header.Hash, false)
 	require.NoError(t, err)
 	require.Equal(t, b.ToEthLikeBlock(false), got)
 
-	got, err = api.GetBlockByHash(b.BlockHash, true)
+	got, err = api.GetBlockByHash(b.Header.Hash, true)
 	require.NoError(t, err)
-	txs, _ := b.Transactions()
-	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
+	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), b.Txs.Len())
 	delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
 	want := b.ToEthLikeBlock(true)
 	delete(want, "transactions")
@@ -148,29 +145,26 @@ func TestGetBlockByNumber(t *testing.T) {
 	blockStore := store.NewBlockStore(db)
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:  1,
-			ChainID: chainID.ToInt().String(),
-			AppHash: []byte{1},
-			Time:    4,
-			ParentBlockHash: common.Hash{2},
+			Height:          1,
+			ChainID:         chainID.ToInt().String(),
+			AppHash:         []byte{1},
+			Time:            4,
+			ParentHash: common.Hash{2},
+			Hash:       common.Hash{1},
 		},
-		Txs:             bfttypes.Txs{bfttypes.Tx([]byte{1})},
-		BlockHash:       common.Hash{1},
-		PrevRandao:      eth.Bytes32([]byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-		Withdrawals:     &ethtypes.Withdrawals{},
+		Txs: bfttypes.Txs{bfttypes.Tx([]byte{1})},
 	}
 	blockStore.AddBlock(b)
 	register := newMockRegister()
 	api := engine.NewEthAPI(blockStore, register, &chainID)
 
-	got, err := api.GetBlockByNumber(b.Height(), false)
+	got, err := api.GetBlockByNumber(b.Header.Height, false)
 	require.NoError(t, err)
 	require.Equal(t, b.ToEthLikeBlock(false), got)
 
-	got, err = api.GetBlockByNumber(b.Height(), true)
+	got, err = api.GetBlockByNumber(b.Header.Height, true)
 	require.NoError(t, err)
-	txs, _ := b.Transactions()
-	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
+	require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), b.Txs.Len())
 	delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
 	want := b.ToEthLikeBlock(true)
 	delete(want, "transactions")
@@ -185,16 +179,14 @@ func TestGetBlockWithNilID(t *testing.T) {
 	blockStore := store.NewBlockStore(db)
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:  1,
-			ChainID: chainID.ToInt().String(),
-			AppHash: []byte{1},
-			Time:    4,
-			ParentBlockHash: common.Hash{2},
+			Height:          1,
+			ChainID:         chainID.ToInt().String(),
+			AppHash:         []byte{1},
+			Time:            4,
+			ParentHash: common.Hash{2},
+			Hash:       common.Hash{1},
 		},
-		Txs:             bfttypes.Txs{bfttypes.Tx([]byte{1})},
-		BlockHash:       common.Hash{1},
-		PrevRandao:      eth.Bytes32([]byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-		Withdrawals:     &ethtypes.Withdrawals{},
+		Txs: bfttypes.Txs{bfttypes.Tx([]byte{1})},
 	}
 	blockStore.AddBlock(b)
 	require.NoError(t, blockStore.UpdateLabel(eth.Unsafe, b.Hash()))
@@ -216,16 +208,14 @@ func TestGetBlockByLabel(t *testing.T) {
 		blockStore := store.NewBlockStore(db)
 		b := &eetypes.Block{
 			Header: &eetypes.Header{
-				Height:  1,
-				ChainID: chainID.ToInt().String(),
-				AppHash: []byte{1},
-				Time:    4,
-				ParentBlockHash: common.Hash{2},
+				Height:          1,
+				ChainID:         chainID.ToInt().String(),
+				AppHash:         []byte{1},
+				Time:            4,
+				ParentHash: common.Hash{2},
+				Hash:       common.Hash{1},
 			},
-			Txs:             bfttypes.Txs{bfttypes.Tx([]byte{1})},
-			BlockHash:       common.Hash{1},
-			PrevRandao:      eth.Bytes32([]byte{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			Withdrawals:     &ethtypes.Withdrawals{},
+			Txs: bfttypes.Txs{bfttypes.Tx([]byte{1})},
 		}
 		blockStore.AddBlock(b)
 		require.NoError(t, blockStore.UpdateLabel(label, b.Hash()))
@@ -238,8 +228,7 @@ func TestGetBlockByLabel(t *testing.T) {
 
 		got, err = api.GetBlockByNumber(label, true)
 		require.NoError(t, err)
-		txs, _ := b.Transactions()
-		require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), txs.Len())
+		require.Equal(t, got["transactions"].(ethtypes.Transactions).Len(), b.Txs.Len())
 		delete(got, "transactions") // Deep equality won't work since the internal tx timestamps are different.
 		want := b.ToEthLikeBlock(true)
 		delete(want, "transactions")

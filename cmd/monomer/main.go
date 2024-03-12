@@ -16,6 +16,7 @@ import (
 	"github.com/polymerdao/monomer/app/node"
 	"github.com/polymerdao/monomer/app/node/server"
 	"github.com/polymerdao/monomer/app/peptide"
+	"github.com/polymerdao/monomer/app/peptide/store"
 	testapp "github.com/polymerdao/monomer/testutil/app"
 )
 
@@ -72,7 +73,7 @@ func run(ctx context.Context, cfg *config) error {
 
 	chainID := "1"
 	peptideApp := peptide.New(chainID, app)
-	if _, err = node.InitChain(peptideApp, blockdb, &node.PeptideGenesis{
+	if _, err = node.InitChain(peptideApp, store.NewBlockStore(blockdb), &node.PeptideGenesis{
 		GenesisTime: time.Now(),
 		GenesisBlock: eth.BlockID{
 			Number: 1,

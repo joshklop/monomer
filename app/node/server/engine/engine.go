@@ -11,46 +11,30 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
+	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 	"github.com/polymerdao/monomer/app/peptide/store"
+	"github.com/polymerdao/monomer/builder"
 )
 
-type Node interface {
-	LastBlockHeight() int64
-	// The latest unsafe block hash
-	//
-	// The latest unsafe block refers to sealed blocks, not the one that's being built on
-	HeadBlockHash() common.Hash
-	CommitBlock() error
+type BlockStore interface {
+	store.BlockStoreReader
 	UpdateLabel(label eth.BlockLabel, hash common.Hash) error
-	Rollback(head, safe, finalized *eetypes.Block) error
 }
 
 type EngineAPI struct {
-	node         Node
-	blockStore   store.BlockStoreReader
+	builder      *builder.Builder
+	blockStore   BlockStore
 	payloadStore payloadstore.PayloadStore
 	lock         sync.RWMutex
 }
 
-func NewEngineAPI(node Node, blockStore store.BlockStoreReader, payloadStore payloadstore.PayloadStore) *EngineAPI {
+func NewEngineAPI(builder *builder.Builder, blockStore BlockStore) *EngineAPI {
 	return &EngineAPI{
-		node:         node,
 		blockStore:   blockStore,
-		payloadStore: payloadStore,
+		builder:      builder,
+		payloadStore: payloadstore.NewPayloadStore(),
 	}
-}
-
-func (e *EngineAPI) rollback(head *eetypes.Block, safeHash, finalizedHash common.Hash) error {
-	getBlock := func(label eth.BlockLabel, hash common.Hash) *eetypes.Block {
-		if hash != (common.Hash{}) {
-			return e.blockStore.BlockByHash(hash)
-		}
-		return e.blockStore.BlockByLabel(label)
-	}
-	safe := getBlock(eth.Safe, safeHash)
-	finalized := getBlock(eth.Finalized, finalizedHash)
-	return e.node.Rollback(head, safe, finalized)
 }
 
 func (e *EngineAPI) ForkchoiceUpdatedV1(
@@ -84,10 +68,12 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	reorg := false
 	// When OpNode issues a FCU with a head block that's different than App's view, it means a reorg happened.
 	// In this case, we need to rollback App and BlockStore to the head block's height-1.
-	if headBlock.Height() != e.node.LastBlockHeight() {
-		// NOTE: with a single centralized sequencer, a reorg can only take us backwards.
-		if err := e.rollback(headBlock, fcs.SafeBlockHash, fcs.FinalizedBlockHash); err != nil {
+	if headBlock.Header.Height < e.blockStore.HeadBlock().Header.Height {
+		if err := e.builder.Rollback(fcs.HeadBlockHash, fcs.SafeBlockHash, fcs.FinalizedBlockHash); err != nil {
 			return nil, engine.InvalidForkChoiceState.With(err)
+		}
+		if err := e.payloadStore.RollbackToHeight(headBlock.Header.Height); err != nil {
+			return nil, engine.InvalidForkChoiceState.With(fmt.Errorf("roll back payload store: %v", err))
 		}
 		reorg = true
 	}
@@ -95,26 +81,26 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	// TODO I don't think using InvalidForkChoiceState everywhere makes sense.
 
 	// update canonical block head
-	if err := e.node.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash); err != nil {
+	if err := e.blockStore.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash); err != nil {
 		return nil, engine.InvalidForkChoiceState.With(err)
 	}
 
 	if fcs.SafeBlockHash != (common.Hash{}) {
-		if err := e.node.UpdateLabel(eth.Safe, fcs.SafeBlockHash); err != nil {
+		if err := e.blockStore.UpdateLabel(eth.Safe, fcs.SafeBlockHash); err != nil {
 			return nil, engine.InvalidForkChoiceState.With(err)
 		}
 	}
 
 	// update finalized block head
 	if fcs.FinalizedBlockHash != (common.Hash{}) {
-		if err := e.node.UpdateLabel(eth.Finalized, fcs.FinalizedBlockHash); err != nil {
+		if err := e.blockStore.UpdateLabel(eth.Finalized, fcs.FinalizedBlockHash); err != nil {
 			return nil, engine.InvalidForkChoiceState.With(err)
 		}
 	}
 
 	// OpNode providing a new payload with reorg
 	if reorg {
-		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.node.LastBlockHeight()+1)
+		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.blockStore.HeadBlock().Header.Height+1)
 		payloadId, err := payload.GetPayloadID()
 		if err != nil {
 			return nil, engine.InvalidPayloadAttributes.With(err)
@@ -130,7 +116,7 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	// start new payload mode
 	if eetypes.HasPayloadAttributes(&pa) {
 		// TODO check for invalid txs in pa
-		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.node.LastBlockHeight()+1)
+		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.blockStore.HeadBlock().Header.Height+1)
 		payloadId, err := payload.GetPayloadID()
 		if err != nil {
 			return nil, engine.InvalidPayloadAttributes.With(err)
@@ -171,13 +157,21 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 
 	// TODO: handle time slot based block production
 	// for now assume block is sealed by this call
-	err := e.node.CommitBlock()
-	// TODO error handling
-	if err != nil {
-		log.Panicf("failed to commit block: %v", err)
+	if err := e.builder.Build(&builder.Payload{
+		Transactions: payload.Attrs.Transactions,
+		GasLimit: func() uint64 {
+			if payload.Attrs.GasLimit == nil {
+				return peptide.DefaultGasLimit
+			}
+			return uint64(*payload.Attrs.GasLimit)
+		}(),
+		Timestamp: uint64(payload.Attrs.Timestamp),
+		// TODO Ignoring the NoTxPool option for now.
+	}); err != nil {
+		log.Panicf("failed to commit block: %v", err) // TODO error handling
 	}
 
-	return payload.ToExecutionPayloadEnvelope(e.node.HeadBlockHash()), nil
+	return payload.ToExecutionPayloadEnvelope(e.blockStore.HeadBlock().Hash()), nil
 }
 
 func (e *EngineAPI) NewPayloadV1(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
@@ -195,7 +189,7 @@ func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStat
 	if e.blockStore.BlockByHash(payload.BlockHash) == nil {
 		return &eth.PayloadStatusV1{Status: eth.ExecutionInvalidBlockHash}, engine.InvalidParams.With(errors.New("block not found"))
 	}
-	headBlockHash := e.node.HeadBlockHash()
+	headBlockHash := e.blockStore.HeadBlock().Hash()
 	return &eth.PayloadStatusV1{
 		Status:          eth.ExecutionValid,
 		LatestValidHash: &headBlockHash,

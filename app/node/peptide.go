@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/polymerdao/monomer/app/node/server"
 	cometbft_rpc "github.com/polymerdao/monomer/app/node/server/cometbft_rpc"
@@ -36,16 +35,14 @@ import (
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
 	peptidecommon "github.com/polymerdao/monomer/app/peptide/common"
-	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 	rpcee "github.com/polymerdao/monomer/app/peptide/rpc_ee"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"
+	"github.com/polymerdao/monomer/builder"
 	"github.com/polymerdao/monomer/mempool"
-	"github.com/samber/lo"
 )
 
 const (
-	DefaultGasLimit  = 30_000_000
 	AppStateDbName   = "appstate"
 	BlockStoreDbName = "blockstore"
 	TxStoreDbName    = "txstore"
@@ -77,6 +74,7 @@ func NewPeptideNode(
 	bs := store.NewBlockStore(bsdb)
 	txstore := txstore.NewTxStore(txstoreDb, logger)
 	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, logger.With("module", "node"))
+
 	cometServer, cometRpcServer := cometbft_rpc.NewCometRpcServer(
 		node,
 		appEndpoint.FullAddress(),
@@ -95,6 +93,20 @@ func NewPeptideNode(
 	return node
 }
 
+// TODO node info should not be controlled by peptide node imho
+func (p *PeptideNode) EarliestNodeInfo() cometbft_rpc.NodeInfo {
+	return cometbft_rpc.NodeInfo{
+		BlockHash:   []byte{},
+		AppHash:     []byte{},
+		BlockHeight: 0,
+		Time:        time.Now(),
+	}
+}
+
+func (p *PeptideNode) LastNodeInfo() cometbft_rpc.NodeInfo {
+	return p.EarliestNodeInfo()
+}
+
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
 func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API {
@@ -105,7 +117,10 @@ func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API 
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
-			Service:   engine.NewEngineAPI(p, p.bs, p.ps),
+			Service: engine.NewEngineAPI(
+				builder.New(p.txMempool, p.chainApp.App, p.bs, p.txstore, p.eventBus, p.chainApp.ChainId),
+				p.bs,
+			),
 		}, {
 			Namespace: "eth",
 			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(bigChainID)),
@@ -136,8 +151,7 @@ func NewPeptideNodeFromConfig(
 	), nil
 }
 
-func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (*eetypes.Block, error) {
-	block := eetypes.Block{}
+func InitChain(app *peptide.PeptideApp, blockStore store.BlockStore, genesis *PeptideGenesis) (*eetypes.Block, error) {
 	l1TxBytes, err := derive.L1InfoDepositBytes(
 		&rollup.Config{},
 		// TODO fill this out?
@@ -150,26 +164,19 @@ func InitChain(app *peptide.PeptideApp, bsdb tmdb.DB, genesis *PeptideGenesis) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive L1 info deposit tx bytes for genesis block: %v", err)
 	}
-	block.Txs = []bfttypes.Tx{l1TxBytes}
 
-	genesisHeader := app.Init(genesis.AppState, genesis.InitialHeight, genesis.GenesisTime)
-
-	header := eetypes.Header{}
-	header.Populate(genesisHeader)
-	block.Header = &header
-	block.GasLimit = hexutil.Uint64(DefaultGasLimit)
-
-	bs := store.NewBlockStore(bsdb)
-
-	bs.AddBlock(&block)
-	hash := block.Hash()
+	block := &eetypes.Block{
+		Txs:    []bfttypes.Tx{l1TxBytes},
+		Header: app.Init(genesis.AppState, genesis.InitialHeight, genesis.GenesisTime),
+	}
+	hash := block.Hash() // Also sets the block hash.
+	blockStore.AddBlock(block)
 	for _, label := range []eth.BlockLabel{eth.Unsafe, eth.Finalized, eth.Safe} {
-		if err := bs.UpdateLabel(label, hash); err != nil {
+		if err := blockStore.UpdateLabel(label, hash); err != nil {
 			panic(err)
 		}
 	}
-
-	return &block, nil
+	return block, nil
 }
 
 // PeptideNode implements all RPC methods defined in RouteMap.
@@ -183,19 +190,8 @@ type PeptideNode struct {
 	txstore  txstore.TxStore
 	logger   tmlog.Logger
 
-	// simulated node info
-	lastNodeInfo     cometbft_rpc.NodeInfo
-	earliestNodeInfo cometbft_rpc.NodeInfo
+	bs store.BlockStore
 
-	// TODO: remove this flag since we don't support non-engine mode here
-	engineMode bool
-	// txResults in current block that's being built. It should be reset after a new block is created for next round.
-	txResults []*abcitypes.TxResult
-
-	bs          store.BlockStore
-	latestBlock *eetypes.Block // latest mined block that may not be canonical
-
-	ps payloadstore.PayloadStore
 	// L2 txs are stored in mempool until block is sealed
 	txMempool *mempool.Pool
 
@@ -239,8 +235,6 @@ func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs s
 		logger:        logger,
 		bs:            bs,
 		txstore:       txstore,
-		engineMode:    true,
-		ps:            payloadstore.NewPayloadStore(),
 		lock:          sync.RWMutex{},
 		txMempool:     mempool.New(mempoolStorage),
 	}
@@ -261,138 +255,36 @@ func (cs *PeptideNode) resume() {
 	// to bring them back to the same place. This should never ever happen but when it does (and it did)
 	// it would cause the loop derivation to get stuck
 	info := cs.chainApp.App.Info(abcitypes.RequestInfo{})
-	if lastBlock.Height() != info.LastBlockHeight {
+	if lastBlock.Header.Height != info.LastBlockHeight {
 		cs.logger.Info("blockstore and appstate out of sync",
 			"last_block_height",
-			lastBlock.Height(),
+			lastBlock.Header.Height,
 			"app_last_height",
 			info.LastBlockHeight)
 
 		// because the appstate is *always* comitted before the blockstore, the only scenario where there'd be
 		// a mismatch is if the appstate is ahead by 1. Other situation would mean something else is broken
 		// and there's no point in trying to fix it at runtime.
-		if lastBlock.Height()+1 != info.LastBlockHeight {
+		if lastBlock.Header.Height+1 != info.LastBlockHeight {
 			panic("difference between blockstore and appstate is higher than 1")
 		}
 
 		// do the mini-rollback to the last height available on the block store
-		if err := cs.chainApp.RollbackToHeight(lastBlock.Height()); err != nil {
+		if err := cs.chainApp.RollbackToHeight(lastBlock.Header.Height); err != nil {
 			panic(err)
 		}
 	}
 
 	header := &tmproto.Header{
-		ChainID:            lastBlock.Header.ChainID,
-		Height:             lastBlock.Header.Height,
-		Time:               time.UnixMilli(int64(lastBlock.Header.Time)),
-		LastCommitHash:     lastBlock.Header.LastCommitHash,
-		DataHash:           lastBlock.Header.DataHash,
-		ValidatorsHash:     lastBlock.Header.ValidatorsHash,
-		NextValidatorsHash: lastBlock.Header.NextValidatorsHash,
-		ConsensusHash:      lastBlock.Header.ConsensusHash,
-		AppHash:            lastBlock.Header.AppHash,
-		LastResultsHash:    lastBlock.Header.LastResultsHash,
-		EvidenceHash:       lastBlock.Header.EvidenceHash,
+		ChainID: lastBlock.Header.ChainID,
+		Height:  lastBlock.Header.Height,
+		Time:    time.UnixMilli(int64(lastBlock.Header.Time)),
+		AppHash: lastBlock.Header.AppHash,
 	}
 
 	if err := cs.chainApp.Resume(header); err != nil {
 		panic(err)
 	}
-	cs.latestBlock = lastBlock
-}
-
-func (cs *PeptideNode) RollbackBlockStore(head, safe, finalized *eetypes.Block) {
-	cs.logger.Debug("starting BlockStore rollback", "height", head.Height())
-	if err := cs.bs.RollbackToHeight(head.Height()); err != nil {
-		panic(fmt.Sprintf("failed to roll back the block store: %v", err))
-	}
-	cs.logger.Debug("updating labels...")
-	cs.bs.UpdateLabel(eth.Unsafe, head.Hash())
-	cs.bs.UpdateLabel(eth.Safe, safe.Hash())
-	cs.bs.UpdateLabel(eth.Finalized, finalized.Hash())
-	cs.logger.Debug("finished BlockStore rollback", "height", head.Height())
-}
-
-func (cs *PeptideNode) RollbackAppStore(head int64) {
-	cs.logger.Debug("starting app rollback", "height", head)
-	// Line below hangs indefinitely; but works fine in separate cli cmd `pepctl`
-	if err := cs.chainApp.RollbackToHeight(head); err != nil {
-		panic(fmt.Sprintf("failed to roll back the app: %v", err))
-	}
-	cs.logger.Debug("finished app rollback", "height", head)
-}
-
-func (cs *PeptideNode) RollbackPayloadStore(head int64) {
-	cs.logger.Debug("starting PayloadStore rollback", "height", head)
-	if err := cs.ps.RollbackToHeight(head); err != nil {
-		cs.logger.Error("failed to roll back the payload store", "err", err)
-		// panic(fmt.Sprintf("failed to roll back the payload store: %v", err))
-	}
-	cs.logger.Debug("finished PayloadStore rollback", "height", head)
-}
-
-func (cs *PeptideNode) RollbackTxStore(head, current int64) {
-	cs.logger.Debug("starting TxStore rollback", "height", head, "current", current)
-	if err := cs.txstore.RollbackToHeight(head, current); err != nil {
-		panic(fmt.Sprintf("failed to roll back the tx store: %v", err))
-	}
-	cs.logger.Debug("finished TxStore rollback", "height", head, "current", current)
-}
-
-// this performs the rollback to a previous height of all of our stores, removing anything that
-// happened *after* the rollback height. If this function suceeds, the chain will resume normal
-// operations starting from the block pointed by `head` (i.e. the latest block will
-// be that pointed by `head`)
-// there's a potential risk with having to rollback different databases, if one of them fails
-// the chain' state may be inconsistent. There's no easy way around this so in that case we panic.
-func (cs *PeptideNode) Rollback(head, safe, finalized *eetypes.Block) error {
-	rollbackHeight := head.Height()
-
-	cs.logger.Debug("trying: PeptideNode rollback to height", "rollbackHeight", rollbackHeight, "newHead", head.Height(), "safe", safe.Height(), "finalized", finalized.Height())
-	cs.lock.Lock()
-	defer func() {
-		cs.lock.Unlock()
-		cs.logger.Debug("PeptideNode rollback to height [unlock]")
-	}()
-	cs.logger.Debug("PeptideNode rollback to height [lock]", "rollbackHeight", rollbackHeight, "newHead", head.Height(), "safe", safe.Height(), "finalized", finalized.Height())
-
-	currentHeight := cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight
-	// first, do all the non-mutating checks and error out if something is not right
-	if safe.Height() > rollbackHeight {
-		return fmt.Errorf(
-			"invalid rollback heights. safe (%v) > unsafe (%v)",
-			safe.Height(),
-			rollbackHeight,
-		)
-	}
-	if finalized.Height() > rollbackHeight {
-		return fmt.Errorf(
-			"invalid rollback heights. finalized (%v) > unsafe (%v)",
-			finalized.Height(),
-			rollbackHeight,
-		)
-	}
-	if rollbackHeight >= currentHeight {
-		return fmt.Errorf(
-			"invalid rollback heights. unsafe (%v) >= app.lastblock (%v)",
-			rollbackHeight,
-			currentHeight,
-		)
-	}
-
-	cs.RollbackBlockStore(head, safe, finalized)
-	cs.RollbackAppStore(head.Height())
-	cs.RollbackPayloadStore(head.Height())
-	cs.RollbackTxStore(head.Height(), currentHeight)
-
-	cs.logger.Info("Rollback complete",
-		"safe_hash", safe.Hash(), "safe_height", safe.Height(),
-		"finalized_hash", finalized.Hash(), "finalized_height", finalized.Height(),
-		"head_hash", head.Hash(), "head_height", head.Height(), "rollbackHeight", rollbackHeight)
-
-	// resume the app at the very end
-	cs.resume()
-	return nil
 }
 
 // OnStart starts the chain server.
@@ -425,18 +317,6 @@ func (cs *PeptideNode) OnWebsocketDisconnect(remoteAddr string, logger tmlog.Log
 	if err != nil {
 		logger.Error("failed to unsubscribe events", "remote", remoteAddr, "err", err)
 	}
-}
-
-// LastNodeInfo returns the latest node info.
-// The nodeInfo is nothing but a placeholder intended only for cometbft rpc server.
-func (cs *PeptideNode) LastNodeInfo() cometbft_rpc.NodeInfo {
-	return cs.lastNodeInfo
-}
-
-// EarliestNodeInfo returns the earliest node info.
-// The nodeInfo is nothing but a placeholder intended only for cometbft rpc server.
-func (cs *PeptideNode) EarliestNodeInfo() cometbft_rpc.NodeInfo {
-	return cs.earliestNodeInfo
 }
 
 func (cs *PeptideNode) ReportMetrics() {
@@ -554,159 +434,28 @@ func (cs *PeptideNode) UpdateLabel(label eth.BlockLabel, hash common.Hash) error
 // deliverTxs delivers all txs to the chainApp.
 //   - This cause pending chainApp state changes, but does not commit the changes.
 //   - App-level tx error will not be bubbled up, but will be included in the tx response for tx events listners and tx quries.
-func (cs *PeptideNode) deliverTxs(txs bfttypes.Txs) error {
+func (cs *PeptideNode) deliverTxs(txs bfttypes.Txs) []*abcitypes.TxResult {
 	height := cs.chainApp.CurrentHeader().Height
+	var txResults []*abcitypes.TxResult
 	for i, tx := range txs {
-		deliverTxResp, err := cs.client.DeliverTxSync(abcitypes.RequestDeliverTx{Tx: tx})
-		if err != nil {
-			return fmt.Errorf("failed to DeliverTxSync tx-%d in block %d due to: %w", i, height, err)
+		var resp *abcitypes.ResponseDeliverTx
+		for {
+			var err error
+			resp, err = cs.client.DeliverTxSync(abcitypes.RequestDeliverTx{Tx: tx})
+			if err == nil {
+				break
+			}
+			cs.logger.Error(fmt.Sprintf("failed to DeliverTxSync tx-%d in block %d due to: %v", i, height, err))
 		}
 		txResult := &abcitypes.TxResult{
 			Height: height,
 			Tx:     tx,
-			Result: *deliverTxResp,
+			Result: *resp,
 		}
-		cs.txResults = append(cs.txResults, txResult)
+		txResults = append(txResults, txResult)
 	}
 	cs.logger.Info("delivered L2 txs to chainApp", "height", height, "numberOfTxs", len(txs))
-	return nil
-}
-
-// commitBlockAndUpdateNodeInfo simulates committing current block and updates node info.
-func (cs *PeptideNode) commitBlockAndUpdateNodeInfo() {
-	block := cs.startBuildingBlock()
-
-	cs.chainApp.CommitAndBeginNextBlock(cs.ps.Current().Attrs.Timestamp)
-	block = cs.sealBlock(block)
-
-	cs.bs.AddBlock(block)
-	cs.latestBlock = block
-
-	// update last nodeInfo
-	cs.lastNodeInfo = cometbft_rpc.NewNodeInfo(
-		cs.chainApp.LastHeader().LastCommitHash,
-		cs.chainApp.LastHeader().AppHash,
-		cs.chainApp.LastHeader().Height,
-	)
-}
-
-// startBuildingBlock starts building a new block for App is committed.
-func (cs *PeptideNode) startBuildingBlock() *eetypes.Block {
-	// fill in block fields with L1 data
-	block := cs.fillBlockWithL1Data(&eetypes.Block{})
-	cs.applyBlockTxs(block)
-	return block
-}
-
-// fillBlockWithL1Data fills in block fields with L1 data.
-func (cs *PeptideNode) fillBlockWithL1Data(block *eetypes.Block) *eetypes.Block {
-	if cs.ps.Current() != nil {
-		// must include L1Txs for L2 block's L1Origin
-		txs := cs.ps.Current().Attrs.Transactions
-		flattenedTxs := make([]byte, 0)
-		for _, tx := range txs {
-			flattenedTxs = append(flattenedTxs, tx...)
-		}
-		block.Txs = append(block.Txs, bfttypes.Tx(flattenedTxs))
-		block.Withdrawals = cs.ps.Current().Attrs.Withdrawals
-	} else if cs.engineMode {
-		cs.logger.Error("currentPayload is nil for non-genesis block", "blockHeight", block.Height())
-		log.Panicf("currentPayload is nil for non-genesis block with height %d", block.Height())
-	}
-	return block
-}
-
-// applyBlockL2Txs applies txs to the block that's currently being built.
-func (cs *PeptideNode) applyBlockTxs(block *eetypes.Block) {
-	// TODO: ensure txs size doesn't exceed block size limit
-	for {
-		length, err := cs.txMempool.Len()
-		if err != nil {
-			panic(fmt.Errorf("enqueue: %v", err))
-		}
-		if length == 0 {
-			break
-		}
-
-		tx, err := cs.txMempool.Dequeue()
-		if err != nil {
-			panic(fmt.Errorf("dequeue: %v", err))
-		}
-		block.Txs = append(block.Txs, tx)
-	}
-	cs.deliverTxs(block.Txs)
-}
-
-// indexAndPublishAllTxs indexes all txs in the block that's currently being built.
-// This func should only be run once per block; or earlier tx indices will be overwritten by later txs.
-func (cs *PeptideNode) indexAndPublishAllTxs(block *eetypes.Block) error {
-	if len(block.Txs) != len(cs.txResults) {
-		return fmt.Errorf(
-			"number of txs (%d) in block %d does not match number of txResults (%d)",
-			len(block.Txs),
-			block.Height(),
-			len(cs.txResults),
-		)
-	}
-
-	if err := cs.txstore.Add(cs.txResults); err != nil {
-		return err
-	}
-
-	// publish tx events
-	for i, txResult := range cs.txResults {
-		if err := cs.eventBus.PublishEventTx(bfttypes.EventDataTx{TxResult: *txResult}); err != nil {
-			cs.logger.Error("failed to publish tx event", "height", txResult.Height, "index", i, "err", err)
-		}
-	}
-	return nil
-}
-
-func (cs *PeptideNode) findParentHash() common.Hash {
-	lastBlock := cs.bs.BlockByNumber(cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight - 1)
-	if lastBlock != nil {
-		return lastBlock.Hash()
-	}
-	// TODO: handle cases where non-genesis block is missing
-	return common.Hash{}
-}
-
-// sealBlock finishes building current L2 block from currentHeader, L2 txs in mempool, and L1 txs from
-// payloadAttributes.
-//
-// sealBlock should be called after chainApp's committed. So chainApp.LastBlockHeight is the sealed block's height
-func (cs *PeptideNode) sealBlock(block *eetypes.Block) *eetypes.Block {
-	cs.logger.Info("seal block", "height", cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight)
-
-	// finalize block fields
-	header := eetypes.Header{}
-	block.Header = header.Populate(cs.chainApp.LastHeader())
-
-	payload := cs.ps.Current()
-	if payload != nil {
-		block.GasLimit = *payload.Attrs.GasLimit
-		block.Header.Time = uint64(payload.Attrs.Timestamp)
-		block.PrevRandao = payload.Attrs.PrevRandao
-		block.Withdrawals = payload.Attrs.Withdrawals
-	}
-
-	block.Header.ParentBlockHash = cs.findParentHash()
-
-	if err := cs.indexAndPublishAllTxs(block); err != nil {
-		cs.logger.Error("failed to index and publish txs", "err", err)
-	}
-	// reset txResults
-	cs.txResults = nil
-
-	return block
-}
-
-// CurrentBlock returns the latest canonical block.
-// This follows the naming convention of a L2 chain's current canonical block.
-func (cs *PeptideNode) CurrentBlock() *eetypes.Block {
-	cs.lock.RLock()
-	defer cs.lock.RUnlock()
-	return cs.bs.BlockByLabel(eth.Unsafe)
+	return txResults
 }
 
 // TODO: add more details to response
@@ -724,64 +473,6 @@ func (cs *PeptideNode) resetClient() {
 	cs.client = cs.clientCreator(cs.chainApp.App)
 
 	// TODO: allow to enable/disable tx indexer; and add logger when cometbft version is upgraded
-
-	// update node info
-	cs.earliestNodeInfo = cometbft_rpc.NewNodeInfo(
-		cs.latestBlock.Hash().Bytes(),
-		cs.chainApp.LastHeader().AppHash,
-		cs.latestBlock.Height(),
-	)
-	cs.lastNodeInfo = cs.earliestNodeInfo
-}
-
-func (cs *PeptideNode) debugL1UserTxs(txs []hexutil.Bytes, source string) {
-	if len(txs) < 2 {
-		return
-	}
-	txBytes := txs[1]
-	var tx ethtypes.Transaction
-	if err := tx.UnmarshalBinary(txBytes); err != nil {
-		cs.logger.Error("failed to unmarshal user deposit transaction", "index", 1, "err", err, "txBytes", txBytes)
-	}
-	cs.logger.Info("user deposit tx", "source", source, "tx", string(lo.Must(tx.MarshalJSON())), "txBytes", txBytes)
-}
-
-// LastBlockHeight returns the last committed block height.
-func (cs *PeptideNode) LastBlockHeight() int64 {
-	return cs.chainApp.App.Info(abcitypes.RequestInfo{}).LastBlockHeight
-}
-
-// SavePayload saves the payload by its ID if it's not already in payload cache.
-// Also update the latest Payload if this is a new payload
-//
-// payload must be valid
-func (cs *PeptideNode) SavePayload(payload *eetypes.Payload) {
-	cs.ps.Add(payload)
-}
-
-// GetPayload returns the payload by its ID if it's in payload cache, or (nil, false)
-func (cs *PeptideNode) GetPayload(payloadId eetypes.PayloadID) (*eetypes.Payload, bool) {
-	return cs.ps.Get(payloadId)
-}
-
-// CurrentPayload returns the latest payload.
-func (cs *PeptideNode) CurrentPayload() *eetypes.Payload {
-	return cs.ps.Current()
-}
-
-// CommitBlock commits the current block and starts a new block with incremented block height.
-func (cs *PeptideNode) CommitBlock() error {
-	cs.lock.Lock()
-	defer cs.lock.Unlock()
-	cs.commitBlockAndUpdateNodeInfo()
-	return nil
-}
-
-// HeadBlockHash returns the hash of the latest sealed block.
-func (cs *PeptideNode) HeadBlockHash() common.Hash {
-	cs.lock.RLock()
-	defer cs.lock.RUnlock()
-	return cs.latestBlock.Hash()
 }
 
 // GetETH returns the wrapped ETH balance in Wei of the given EVM address.

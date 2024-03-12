@@ -2,95 +2,64 @@ package types
 
 import (
 	"fmt"
+	"time"
 	"math/big"
 
+	abcitypes "github.com/cometbft/cometbft/abci/types"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	bfttypes "github.com/cometbft/cometbft/types"
-	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type Header struct {
-	ChainID string `json:"chain_id"`
-	Height  int64  `json:"height"`
-	Time    uint64 `json:"time"`
-
-	ParentBlockHash common.Hash        `json:"parentHash"`
-
-	// hashes of block data
-	LastCommitHash []byte `json:"last_commit_hash"` // commit from validators from the last block
-	DataHash       []byte `json:"data_hash"`        // transactions
-
-	// hashes from the app output from the prev block
-	ValidatorsHash     []byte `json:"validators_hash"`      // validators for the current block
-	NextValidatorsHash []byte `json:"next_validators_hash"` // validators for the next block
-	ConsensusHash      []byte `json:"consensus_hash"`       // consensus params for current block
-	AppHash            []byte `json:"app_hash"`             // state after txs from the previous block
-	// root hash of all results from the txs from the previous block
-	LastResultsHash []byte `json:"last_results_hash"`
-
-	// consensus info
-	EvidenceHash []byte `json:"evidence_hash"` // evidence included in the block
+	ChainID    string      `json:"chain_id"`
+	Height     int64       `json:"height"`
+	Time       uint64      `json:"time"`
+	ParentHash common.Hash `json:"parentHash"`
+	// state after txs from the *previous* block
+	AppHash  []byte      `json:"app_hash"`
+	GasLimit uint64      `json:"gasLimit"`
+	Hash     common.Hash `json:"hash"`
 }
 
-func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
-	h.ChainID = cosmosHeader.ChainID
-	h.Height = cosmosHeader.Height
-	h.Time = uint64(cosmosHeader.Time.Unix())
-	h.ParentBlockHash = crypto.Keccak256Hash(cosmosHeader.LastBlockId.Hash)
-	h.LastCommitHash = cosmosHeader.LastCommitHash
-	h.DataHash = cosmosHeader.DataHash
-	h.ValidatorsHash = cosmosHeader.ValidatorsHash
-	h.NextValidatorsHash = cosmosHeader.NextValidatorsHash
-	h.ConsensusHash = cosmosHeader.ConsensusHash
-	h.AppHash = cosmosHeader.AppHash
-	h.LastResultsHash = cosmosHeader.LastResultsHash
-	h.EvidenceHash = cosmosHeader.EvidenceHash
-	return h
+func (h *Header) ToComet() *tmproto.Header {
+	return &tmproto.Header{
+		ChainID: h.ChainID,
+		Time:    time.Unix(int64(h.Time), 0),
+		AppHash: h.AppHash,
+	}
 }
 
 type Block struct {
-	Txs             bfttypes.Txs       `json:"txs"`
-	Header          *Header            `json:"header"`
-	GasLimit        hexutil.Uint64     `json:"gasLimit"`
-	BlockHash       common.Hash        `json:"hash"`
-	PrevRandao      eth.Bytes32        `json:"prevRandao"`
-	Withdrawals     *types.Withdrawals `json:"withdrawals,omitempty"`
-	ParentBeaconBlockRoot *common.Hash       `json:"parentBeaconBlockRoot,omitempty"`
-}
-
-func (b *Block) Height() int64 {
-	return b.Header.Height
+	Header    *Header      `json:"header"`
+	Txs       bfttypes.Txs `json:"txs"`
+	TxResults []*abcitypes.TxResult
 }
 
 // Hash returns a unique hash of the block, used as the block identifier
 func (b *Block) Hash() common.Hash {
-	if b.BlockHash == (common.Hash{}) {
-		header := types.Header{}
-		header.ParentHash = b.ParentHash()
-		header.Root = common.BytesToHash(b.Header.AppHash)
-		header.Number = big.NewInt(b.Height())
-		header.GasLimit = uint64(b.GasLimit)
-		header.MixDigest = common.Hash(b.PrevRandao)
-		header.Time = b.Header.Time
-		_, header.TxHash = b.Transactions()
-
-		// these are set to "empty" stuff but they are needed to corre
-		// a correct
-		header.UncleHash = types.EmptyUncleHash
-		header.ReceiptHash = types.EmptyReceiptsHash
-		header.BaseFee = common.Big0
-		header.WithdrawalsHash = &types.EmptyWithdrawalsHash
-
-		hash := header.Hash()
-		copy(b.BlockHash[:], hash[:])
+	if b.Header.Hash == (common.Hash{}) {
+		_, txCommitment := b.ethLikeTransactions()
+		b.Header.Hash = (&types.Header{
+			ParentHash:      b.Header.ParentHash,
+			Root:            common.BytesToHash(b.Header.AppHash), // TODO actually take the keccak
+			Number:          big.NewInt(b.Header.Height),
+			GasLimit:        uint64(b.Header.GasLimit),
+			MixDigest:       common.Hash{},
+			Time:            b.Header.Time,
+			TxHash:          txCommitment,
+			UncleHash:       types.EmptyUncleHash,
+			ReceiptHash:     types.EmptyReceiptsHash,
+			BaseFee:         common.Big0,
+			WithdrawalsHash: &types.EmptyWithdrawalsHash,
+		}).Hash()
 	}
-	return b.BlockHash
+	return b.Header.Hash
 }
+
 // This trick is played by the eth rpc server too. Instead of constructing
 // an actual eth block, simply create a map with the right keys so the client
 // can unmarshal it into a block
@@ -100,11 +69,11 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 
 	result := map[string]any{
 		// These are the ones that make sense to polymer.
-		"parentHash": b.ParentHash(),
+		"parentHash": b.Header.ParentHash,
 		"stateRoot":  common.BytesToHash(b.Header.AppHash),
-		"number":     (*hexutil.Big)(big.NewInt(b.Height())),
-		"gasLimit":   b.GasLimit,
-		"mixHash":    b.PrevRandao,
+		"number":     (*hexutil.Big)(big.NewInt(b.Header.Height)),
+		"gasLimit":   b.Header.GasLimit,
+		"mixHash":    common.Hash{},
 		"timestamp":  hexutil.Uint64(b.Header.Time),
 		"hash":       b.Hash(),
 
@@ -118,13 +87,13 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 		"gasUsed":               hexutil.Uint64(0),
 		"logsBloom":             types.Bloom(make([]byte, types.BloomByteLength)),
 		"withdrawalsRoot":       types.EmptyWithdrawalsHash,
-		"withdrawals":           b.Withdrawals,
+		"withdrawals":           types.Withdrawals{},
 		"blobGasUsed":           &blockGasUsed,
 		"excessBlobGas":         &excessBlobGas,
-		"parentBeaconBlockRoot": b.ParentBeaconBlockRoot,
+		"parentBeaconBlockRoot": common.Hash{},
 	}
 
-	txs, root := b.Transactions()
+	txs, root := b.ethLikeTransactions()
 	if inclTx {
 		result["transactionsRoot"] = root
 		result["transactions"] = txs
@@ -134,11 +103,7 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 	return result
 }
 
-func (b *Block) ParentHash() common.Hash {
-	return b.Header.ParentBlockHash
-}
-
-func (b *Block) Transactions() (types.Transactions, common.Hash) {
+func (b *Block) ethLikeTransactions() (types.Transactions, common.Hash) {
 	chainId, ok := big.NewInt(0).SetString(b.Header.ChainID, 10)
 	if !ok {
 		panic(fmt.Sprintf("block chain id is not an integer %s", b.Header.ChainID))

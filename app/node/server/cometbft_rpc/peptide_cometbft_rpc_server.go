@@ -60,8 +60,10 @@ func NewNodeInfo(blockHash, appHash []byte, blockHeight int64) NodeInfo {
 type Node interface {
 	OnWebsocketDisconnect(remoteAddr string, logger tmlog.Logger)
 	AddToTxMempool(tx bfttypes.Tx)
+
 	LastNodeInfo() NodeInfo
 	EarliestNodeInfo() NodeInfo
+
 	ValidatorInfo() ctypes.ValidatorInfo
 	EventBus() *bfttypes.EventBus
 	GetTxByHash([]byte) (*abcitypes.TxResult, error)

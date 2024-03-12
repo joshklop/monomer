@@ -46,7 +46,7 @@ func (e *EthAPI) GetBalance(address common.Address, id any) (*hexutil.Big, error
 		return nil, errors.New("block not found")
 	}
 
-	balance, err := e.register.Balance(address, b.Height())
+	balance, err := e.register.Balance(address, b.Header.Height)
 	if err != nil {
 		return nil, fmt.Errorf("get balance for address %s at height %d: %v", address, b.Header.Height, err)
 	}
