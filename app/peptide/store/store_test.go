@@ -17,7 +17,7 @@ func TestSetUnsafeBlock(t *testing.T) {
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        1,
-			LastBlockHash: []byte("parent"),
+			ParentBlockHash: common.HexToHash("0x0"),
 		},
 		BlockHash: common.HexToHash("0x1"),
 	}
@@ -47,7 +47,7 @@ func TestUpdateLabel(t *testing.T) {
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        1,
-			LastBlockHash: []byte("parent"),
+			ParentBlockHash: common.HexToHash("0x0"),
 		},
 		BlockHash: common.HexToHash("0x1"),
 	}
@@ -70,7 +70,7 @@ func TestUpdateLabel(t *testing.T) {
 	block2 := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:        2,
-			LastBlockHash: []byte("parent2"),
+			ParentBlockHash: common.HexToHash("0x1"),
 		},
 		BlockHash: common.HexToHash("0x2"),
 	}
@@ -90,7 +90,7 @@ func TestMultipleBlocks(t *testing.T) {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
 				Height:        i,
-				LastBlockHash: []byte(fmt.Sprintf("p:%d", i)),
+				ParentBlockHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
 			},
 			BlockHash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 		})
@@ -131,7 +131,7 @@ func TestRollback(t *testing.T) {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
 				Height:        i,
-				LastBlockHash: []byte(fmt.Sprintf("p:%d", i)),
+				ParentBlockHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
 			},
 			BlockHash: common.HexToHash(fmt.Sprintf("0x%d", i)),
 		})

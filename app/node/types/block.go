@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type Header struct {
@@ -18,8 +19,7 @@ type Header struct {
 	Height  int64  `json:"height"`
 	Time    uint64 `json:"time"`
 
-	// prev block hash
-	LastBlockHash []byte `json:"last_block_hash"`
+	ParentBlockHash common.Hash        `json:"parentHash"`
 
 	// hashes of block data
 	LastCommitHash []byte `json:"last_commit_hash"` // commit from validators from the last block
@@ -41,7 +41,7 @@ func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
 	h.ChainID = cosmosHeader.ChainID
 	h.Height = cosmosHeader.Height
 	h.Time = uint64(cosmosHeader.Time.Unix())
-	h.LastBlockHash = cosmosHeader.LastBlockId.Hash
+	h.ParentBlockHash = crypto.Keccak256Hash(cosmosHeader.LastBlockId.Hash)
 	h.LastCommitHash = cosmosHeader.LastCommitHash
 	h.DataHash = cosmosHeader.DataHash
 	h.ValidatorsHash = cosmosHeader.ValidatorsHash
@@ -56,7 +56,6 @@ func (h *Header) Populate(cosmosHeader *tmproto.Header) *Header {
 type Block struct {
 	Txs             bfttypes.Txs       `json:"txs"`
 	Header          *Header            `json:"header"`
-	ParentBlockHash common.Hash        `json:"parentHash"`
 	GasLimit        hexutil.Uint64     `json:"gasLimit"`
 	BlockHash       common.Hash        `json:"hash"`
 	PrevRandao      eth.Bytes32        `json:"prevRandao"`
@@ -136,7 +135,7 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 }
 
 func (b *Block) ParentHash() common.Hash {
-	return b.ParentBlockHash
+	return b.Header.ParentBlockHash
 }
 
 func (b *Block) Transactions() (types.Transactions, common.Hash) {

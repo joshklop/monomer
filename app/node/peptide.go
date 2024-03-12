@@ -690,7 +690,7 @@ func (cs *PeptideNode) sealBlock(block *eetypes.Block) *eetypes.Block {
 		block.Withdrawals = payload.Attrs.Withdrawals
 	}
 
-	block.ParentBlockHash = cs.findParentHash()
+	block.Header.ParentBlockHash = cs.findParentHash()
 
 	if err := cs.indexAndPublishAllTxs(block); err != nil {
 		cs.logger.Error("failed to index and publish txs", "err", err)
