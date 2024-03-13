@@ -15,7 +15,6 @@ import (
 
 type PeptideGenesis struct {
 	GenesisTime   time.Time   `json:"genesis_time"`
-	GenesisBlock  eth.BlockID `json:"genesis_block"`
 	ChainID       string      `json:"chain_id"`
 	AppState      []byte      `json:"app_state"`
 	L1            eth.BlockID `json:"l1"`
@@ -24,12 +23,6 @@ type PeptideGenesis struct {
 }
 
 func (p *PeptideGenesis) Validate() error {
-	if p.GenesisBlock.Hash.Cmp(common.Hash{}) == 0 {
-		return fmt.Errorf("genesis block hash must not be empty")
-	}
-	if p.GenesisBlock.Number == uint64(0) {
-		return fmt.Errorf("genesis block height must not be zero")
-	}
 	if p.L1.Hash.Cmp(common.Hash{}) == 0 {
 		return fmt.Errorf("l1 hash must not be empty")
 	}

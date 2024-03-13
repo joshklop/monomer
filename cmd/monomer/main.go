@@ -75,9 +75,6 @@ func run(ctx context.Context, cfg *config) error {
 	peptideApp := peptide.New(chainID, app)
 	if _, err = node.InitChain(peptideApp, store.NewBlockStore(blockdb), &node.PeptideGenesis{
 		GenesisTime: time.Now(),
-		GenesisBlock: eth.BlockID{
-			Number: 1,
-		},
 		ChainID: chainID,
 		AppState: []byte(`{
 				"key": "value"

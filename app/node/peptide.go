@@ -72,7 +72,7 @@ func NewPeptideNode(
 	logger server.Logger,
 ) *PeptideNode {
 	bs := store.NewBlockStore(bsdb)
-	txstore := txstore.NewTxStore(txstoreDb, logger)
+	txstore := txstore.NewTxStore(txstoreDb)
 	node := newNode(chainApp, clientCreator, bs, txstore, mempooldb, logger.With("module", "node"))
 
 	cometServer, cometRpcServer := cometbft_rpc.NewCometRpcServer(

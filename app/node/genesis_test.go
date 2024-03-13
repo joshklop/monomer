@@ -27,10 +27,6 @@ func (s *genesisTestSuite) SetupTest() {
 	s.homedir = homedir
 	s.genesis = &PeptideGenesis{
 		GenesisTime: time.Unix(1699473809, 0).UTC(),
-		GenesisBlock: eth.BlockID{
-			Hash:   common.HexToHash("0x1"),
-			Number: 2,
-		},
 		ChainID:  "123",
 		AppState: []byte("state"),
 		L1: eth.BlockID{
@@ -80,16 +76,6 @@ func (s *genesisTestSuite) TestValidateFailures() {
 			desc:   "invalid chain id",
 			modify: func(g *PeptideGenesis) { g.ChainID = "foo" },
 			err:    "chain-id must be numerical",
-		},
-		{
-			desc:   "invalid genesis block hash",
-			modify: func(g *PeptideGenesis) { g.GenesisBlock.Hash = common.Hash{} },
-			err:    "genesis block hash must not be empty",
-		},
-		{
-			desc:   "invalid genesis block height",
-			modify: func(g *PeptideGenesis) { g.GenesisBlock.Number = 0 },
-			err:    "genesis block height must not be zero",
 		},
 		{
 			desc:   "invalid l1 hash",
