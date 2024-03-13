@@ -21,7 +21,7 @@ type Builder struct {
 	blockStore store.BlockStore
 	txStore    txstore.TxStore
 	eventBus   *bfttypes.EventBus
-	chainID    string
+	chainID    eetypes.ChainID
 }
 
 func New(
@@ -30,7 +30,7 @@ func New(
 	blockStore store.BlockStore,
 	txStore txstore.TxStore,
 	eventBus *bfttypes.EventBus,
-	chainID string,
+	chainID eetypes.ChainID,
 ) *Builder {
 	return &Builder{
 		mempool:    mempool,
@@ -114,7 +114,7 @@ func (b *Builder) Build(payload *Payload) error {
 
 	// BeginBlock, DeliverTx, EndBlock, Commit
 	b.app.BeginBlock(abcitypes.RequestBeginBlock{
-		Header: *header.ToComet(),
+		Header: *header.ToComet().ToProto(),
 	})
 	var txResults []*abcitypes.TxResult
 	for i, tx := range txs {

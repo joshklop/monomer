@@ -1,12 +1,11 @@
 package types
 
 import (
-	"fmt"
-	"time"
 	"math/big"
+	"strconv"
+	"time"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -14,8 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
+type ChainID uint64
+
+func (id ChainID) String() string {
+	return strconv.FormatUint(uint64(id), 10)
+}
+
 type Header struct {
-	ChainID    string      `json:"chain_id"`
+	ChainID    ChainID     `json:"chain_id"`
 	Height     int64       `json:"height"`
 	Time       uint64      `json:"time"`
 	ParentHash common.Hash `json:"parentHash"`
@@ -25,18 +30,19 @@ type Header struct {
 	Hash     common.Hash `json:"hash"`
 }
 
-func (h *Header) ToComet() *tmproto.Header {
-	return &tmproto.Header{
-		ChainID: h.ChainID,
+func (h *Header) ToComet() *bfttypes.Header {
+	return &bfttypes.Header{
+		ChainID: h.ChainID.String(),
+		Height:  h.Height,
 		Time:    time.Unix(int64(h.Time), 0),
 		AppHash: h.AppHash,
 	}
 }
 
 type Block struct {
-	Header    *Header      `json:"header"`
-	Txs       bfttypes.Txs `json:"txs"`
-	TxResults []*abcitypes.TxResult
+	Header    *Header               `json:"header"`
+	Txs       bfttypes.Txs          `json:"txs"`
+	TxResults []*abcitypes.TxResult `json:"tx_results"`
 }
 
 // Hash returns a unique hash of the block, used as the block identifier
@@ -104,16 +110,11 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 }
 
 func (b *Block) ethLikeTransactions() (types.Transactions, common.Hash) {
-	chainId, ok := big.NewInt(0).SetString(b.Header.ChainID, 10)
-	if !ok {
-		panic(fmt.Sprintf("block chain id is not an integer %s", b.Header.ChainID))
-	}
-
 	var txs types.Transactions
 	for _, tx := range b.Txs {
 		// TODO: update to use proper Gas and To values if possible
 		txData := &types.DynamicFeeTx{
-			ChainID: chainId,
+			ChainID: new(big.Int).SetUint64(uint64(b.Header.ChainID)),
 			Data:    tx,
 			Gas:     0,
 			Value:   big.NewInt(0),

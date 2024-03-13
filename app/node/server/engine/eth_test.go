@@ -72,14 +72,14 @@ func TestGetBalance(t *testing.T) {
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
 			Height:    0,
-			ChainID:   chainID.ToInt().String(),
+			ChainID:   eetypes.ChainID(chainID.ToInt().Uint64()),
 			Hash: common.Hash{0},
 		},
 	})
 	blockStore.AddBlock(&eetypes.Block{
 		Header: &eetypes.Header{
 			Height:    1,
-			ChainID:   chainID.ToInt().String(),
+			ChainID:   eetypes.ChainID(chainID.ToInt().Uint64()),
 			Hash: common.Hash{1},
 		},
 	})
@@ -112,7 +112,7 @@ func TestGetBlockByHash(t *testing.T) {
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:          1,
-			ChainID:         chainID.ToInt().String(),
+			ChainID:         eetypes.ChainID(chainID.ToInt().Uint64()),
 			AppHash:         []byte{1},
 			Time:            4,
 			ParentHash: common.Hash{2},
@@ -146,7 +146,7 @@ func TestGetBlockByNumber(t *testing.T) {
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:          1,
-			ChainID:         chainID.ToInt().String(),
+			ChainID:         eetypes.ChainID(chainID.ToInt().Uint64()),
 			AppHash:         []byte{1},
 			Time:            4,
 			ParentHash: common.Hash{2},
@@ -180,7 +180,7 @@ func TestGetBlockWithNilID(t *testing.T) {
 	b := &eetypes.Block{
 		Header: &eetypes.Header{
 			Height:          1,
-			ChainID:         chainID.ToInt().String(),
+			ChainID:         eetypes.ChainID(chainID.ToInt().Uint64()),
 			AppHash:         []byte{1},
 			Time:            4,
 			ParentHash: common.Hash{2},
@@ -209,7 +209,7 @@ func TestGetBlockByLabel(t *testing.T) {
 		b := &eetypes.Block{
 			Header: &eetypes.Header{
 				Height:          1,
-				ChainID:         chainID.ToInt().String(),
+				ChainID:         eetypes.ChainID(chainID.ToInt().Uint64()),
 				AppHash:         []byte{1},
 				Time:            4,
 				ParentHash: common.Hash{2},

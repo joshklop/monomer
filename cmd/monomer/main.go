@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/polymerdao/monomer/app/node"
 	"github.com/polymerdao/monomer/app/node/server"
+	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	testapp "github.com/polymerdao/monomer/testutil/app"
@@ -71,18 +72,17 @@ func run(ctx context.Context, cfg *config) error {
 	}
 	defer mempooldb.Close() // TODO check error
 
-	chainID := "1"
-	peptideApp := peptide.New(chainID, app)
-	if _, err = node.InitChain(peptideApp, store.NewBlockStore(blockdb), &node.PeptideGenesis{
+	chainID := eetypes.ChainID(1)
+	if _, err = node.InitChain(app, store.NewBlockStore(blockdb), &node.PeptideGenesis{
 		GenesisTime: time.Now(),
-		ChainID: chainID,
+		ChainID:     chainID.String(),
 		AppState: []byte(`{
 				"key": "value"
 			}`),
 		L1: eth.BlockID{
 			Number: 1,
 		},
-		InitialHeight: 1,
+		InitialL2Height: 1,
 	}); err != nil {
 		return fmt.Errorf("init chain: %v", err)
 	}
@@ -99,7 +99,7 @@ func run(ctx context.Context, cfg *config) error {
 			Host:     fmt.Sprintf("localhost:%d", cfg.EnginePort),
 			Protocol: "tcp",
 		},
-		peptideApp,
+		peptide.New(chainID, app),
 		func(app abcitypes.Application) abciclient.Client {
 			return nil // TODO
 		},
