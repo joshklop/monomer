@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"errors"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -20,6 +21,13 @@ type Genesis struct {
 	// It may be greater than zero in the event of chain restarts.
 	// https://docs.cometbft.com/v0.38/spec/core/genesis
 	InitialL2Height uint64 `json:"initial_height"`
+}
+
+func (g *Genesis) Validate() error {
+	if g.InitialL2Height == 0 {
+		return errors.New("initial L2 height must be non-zero")
+	}
+	return nil
 }
 
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {

@@ -158,7 +158,7 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 	// TODO: handle time slot based block production
 	// for now assume block is sealed by this call
 	if err := e.builder.Build(&builder.Payload{
-		Transactions: payload.Attrs.Transactions,
+		Transactions: payload.Attrs.Transactions, // TODO fix
 		GasLimit: func() uint64 {
 			if payload.Attrs.GasLimit == nil {
 				return peptide.DefaultGasLimit

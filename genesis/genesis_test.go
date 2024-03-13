@@ -15,12 +15,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestValidate(t *testing.T) {
+	require.NoError(t, (&genesis.Genesis{
+		InitialL2Height: 1,
+	}).Validate())
+	require.ErrorContains(t, (&genesis.Genesis{}).Validate(), "initial L2 height must be non-zero")
+}
+
 func TestCommit(t *testing.T) {
 	tests := map[string]*genesis.Genesis{
 		"empty non-nil state": {
+			InitialL2Height: 1,
 			AppState: []byte{},
 		},
 		"nonempty state": {
+			InitialL2Height: 1,
 			AppState: func() []byte {
 				// We happen to know this is the proper way to marshal the testapp's state.
 				// It is a pity the testapp doesn't have a better way to programmatically create states.
@@ -31,13 +40,12 @@ func TestCommit(t *testing.T) {
 				return stateBytes
 			}(),
 		},
-		"non-zero initial L2 height": {
-			InitialL2Height: 1,
-		},
 		"non-zero chain ID": {
+			InitialL2Height: 1,
 			ChainID: 1,
 		},
 		"non-zero genesis time": {
+			InitialL2Height: 1,
 			Time: 1,
 		},
 	}
@@ -52,6 +60,7 @@ func TestCommit(t *testing.T) {
 			})
 			blockStore := store.NewBlockStore(blockstoredb)
 
+			require.NoError(t, g.Validate())
 			require.NoError(t, g.Commit(app, blockStore))
 
 			// Application.

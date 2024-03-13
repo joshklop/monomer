@@ -7,7 +7,6 @@ import (
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/store"
@@ -70,21 +69,18 @@ func (b *Builder) Rollback(head, safe, finalized common.Hash) error {
 }
 
 type Payload struct {
-	Transactions []hexutil.Bytes
+	// Transactions functions as an inclusion list.
+	Transactions bfttypes.Txs
 	GasLimit     uint64
 	Timestamp    uint64
 }
 
 func (b *Builder) Build(payload *Payload) error {
-	// Preprocess L1 txs and take L2 txs from mempool.
 	var txs bfttypes.Txs
-	l1Txs := payload.Transactions
-	flattenedTxs := make([]byte, 0)
-	for _, tx := range l1Txs {
-		flattenedTxs = append(flattenedTxs, tx...)
-	}
-	txs = append(txs, bfttypes.Tx(flattenedTxs))
+	copy(txs, payload.Transactions)
 	for {
+		// TODO there is risk of losing txs if mempool db fails.
+		// we need to fix db consistency in general, so we're just panicing on errors for now.
 		length, err := b.mempool.Len()
 		if err != nil {
 			panic(fmt.Errorf("enqueue: %v", err))
@@ -103,6 +99,9 @@ func (b *Builder) Build(payload *Payload) error {
 	// Build header.
 	info := b.app.Info(abcitypes.RequestInfo{})
 	currentHead := b.blockStore.BlockByNumber(info.GetLastBlockHeight())
+	if currentHead == nil {
+		return fmt.Errorf("block not found at height: %d", info.GetLastBlockHeight())
+	}
 	header := &eetypes.Header{
 		ChainID:    b.chainID,
 		Height:     currentHead.Header.Height + 1,
