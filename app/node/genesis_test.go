@@ -33,7 +33,7 @@ func (s *genesisTestSuite) SetupTest() {
 			Hash:   common.HexToHash("0x3"),
 			Number: 4,
 		},
-		InitialHeight: 5,
+		InitialL2Height: 5,
 	}
 }
 

@@ -20,7 +20,6 @@ import (
 	tmlog "github.com/cometbft/cometbft/libs/log"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/libs/service"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -79,7 +78,7 @@ func NewPeptideNode(
 		node,
 		appEndpoint.FullAddress(),
 		node.client,
-		chainApp.ChainId,
+		chainApp.ChainId.String(),
 		logger,
 	)
 
@@ -110,10 +109,6 @@ func (p *PeptideNode) LastNodeInfo() cometbft_rpc.NodeInfo {
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
 func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API {
-	bigChainID, ok := new(big.Int).SetString(p.chainApp.ChainId, 10)
-	if !ok {
-		panic("parse big.Int chain id")
-	}
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
@@ -123,7 +118,7 @@ func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API 
 			),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(bigChainID)),
+			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(new(big.Int).SetUint64(uint64(p.chainApp.ChainId)))),
 		}, {
 			Namespace: "pep",
 			Service:   engine.NewPeptideAPI(p.bs, logger.With("module", "peptide")),
@@ -151,7 +146,7 @@ func NewPeptideNodeFromConfig(
 	), nil
 }
 
-func InitChain(app *peptide.PeptideApp, blockStore store.BlockStore, genesis *PeptideGenesis) (*eetypes.Block, error) {
+func InitChain(app peptide.Application, blockStore store.BlockStore, genesis *PeptideGenesis) (*eetypes.Block, error) {
 	l1TxBytes, err := derive.L1InfoDepositBytes(
 		&rollup.Config{},
 		// TODO fill this out?
@@ -167,7 +162,8 @@ func InitChain(app *peptide.PeptideApp, blockStore store.BlockStore, genesis *Pe
 
 	block := &eetypes.Block{
 		Txs:    []bfttypes.Tx{l1TxBytes},
-		Header: app.Init(genesis.AppState, genesis.InitialHeight, genesis.GenesisTime),
+		// TODO
+		//Header: peptide.Init(app, genesis.ChainID, genesis.AppState, genesis.InitialL2Height, genesis.GenesisTime),
 	}
 	hash := block.Hash() // Also sets the block hash.
 	blockStore.AddBlock(block)
@@ -275,14 +271,7 @@ func (cs *PeptideNode) resume() {
 		}
 	}
 
-	header := &tmproto.Header{
-		ChainID: lastBlock.Header.ChainID,
-		Height:  lastBlock.Header.Height,
-		Time:    time.UnixMilli(int64(lastBlock.Header.Time)),
-		AppHash: lastBlock.Header.AppHash,
-	}
-
-	if err := cs.chainApp.Resume(header); err != nil {
+	if err := cs.chainApp.Resume(lastBlock.Header.ToComet().ToProto()); err != nil {
 		panic(err)
 	}
 }

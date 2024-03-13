@@ -9,17 +9,18 @@ import (
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-
 	"github.com/ethereum/go-ethereum/common"
 )
 
 type PeptideGenesis struct {
-	GenesisTime   time.Time   `json:"genesis_time"`
-	ChainID       string      `json:"chain_id"`
-	AppState      []byte      `json:"app_state"`
-	L1            eth.BlockID `json:"l1"`
-	InitialHeight int64       `json:"initial_height"`
-	// TODO add missing stuff
+	GenesisTime time.Time   `json:"genesis_time"`
+	ChainID     string      `json:"chain_id"`
+	AppState    []byte      `json:"app_state"`
+	L1          eth.BlockID `json:"l1"`
+	// InitialL2Height is usually 0 (Comet uses 1, we use 0).
+	// It may be greater than zero in the event of chain restarts.
+	// https://docs.cometbft.com/v0.38/spec/core/genesis
+	InitialL2Height int64 `json:"initial_height"`
 }
 
 func (p *PeptideGenesis) Validate() error {

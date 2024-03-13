@@ -55,6 +55,6 @@ func TestBuild(t *testing.T) {
 		blockStore,
 		txStore,
 		eventBus,
-		"1",
+		1,
 	)
 }

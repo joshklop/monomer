@@ -553,12 +553,7 @@ func toCometBlock(block *Block) *ctypes.ResultBlock {
 			Hash: bytes.HexBytes(blockHash[:]),
 		},
 		Block: &bfttypes.Block{
-			Header: bfttypes.Header{
-				ChainID: block.Header.ChainID,
-				Time:    time.Unix(int64(block.Header.Time), 0),
-				Height:  block.Header.Height,
-				AppHash: bytes.HexBytes(block.Header.AppHash),
-			},
+			Header: *block.Header.ToComet(),
 		},
 	}
 }

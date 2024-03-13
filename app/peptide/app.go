@@ -33,7 +33,7 @@ type PeptideApp struct {
 	EncodingConfig       *params.EncodingConfig
 	lastHeader           *tmproto.Header
 	currentHeader        *tmproto.Header
-	ChainId              string
+	ChainId              eetypes.ChainID
 	BondDenom            string
 	VotingPowerReduction sdk.Int
 }
@@ -76,7 +76,7 @@ var DefaultConsensusParams = &tmproto.ConsensusParams{
 	},
 }
 
-func New(chainID string, app Application) *PeptideApp {
+func New(chainID eetypes.ChainID, app Application) *PeptideApp {
 	return &PeptideApp{
 		App:                  app,
 		ValSet:               &tmtypes.ValidatorSet{},
@@ -105,7 +105,7 @@ func (a *PeptideApp) ImportAppStateAndValidators(
 func (a *PeptideApp) InitChainWithGenesisState(state app.GenesisState) abci.ResponseInitChain {
 	stateBytes := lo.Must(json.MarshalIndent(state, "", " "))
 	req := &abci.RequestInitChain{
-		ChainId:         a.ChainId,
+		ChainId:         a.ChainId.String(),
 		ConsensusParams: DefaultConsensusParams,
 		Time:            time.Now(),
 		AppStateBytes:   stateBytes,
@@ -116,7 +116,7 @@ func (a *PeptideApp) InitChainWithGenesisState(state app.GenesisState) abci.Resp
 
 func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int64) abci.ResponseInitChain {
 	req := &abci.RequestInitChain{
-		ChainId:         a.ChainId,
+		ChainId:         a.ChainId.String(),
 		ConsensusParams: DefaultConsensusParams,
 		AppStateBytes:   state,
 		Time:            time.Now(),
@@ -132,7 +132,7 @@ func (a *PeptideApp) InitChainWithGenesisStateAndHeight(state []byte, height int
 // - Returns a "genesis header" with the genesis block height and app state hash
 func (a *PeptideApp) Init(appState []byte, initialHeight int64, genesisTime time.Time) *eetypes.Header {
 	response := a.App.InitChain(abci.RequestInitChain{
-		ChainId:         a.ChainId,
+		ChainId:         a.ChainId.String(),
 		ConsensusParams: DefaultConsensusParams,
 		AppStateBytes:   appState,
 		Time:            genesisTime,
@@ -162,7 +162,7 @@ func (a *PeptideApp) Resume(lastHeader *tmproto.Header) error {
 		Height:             a.App.Info(abci.RequestInfo{}).LastBlockHeight + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
-		ChainID:            a.ChainId,
+		ChainID:            a.ChainId.String(),
 	}
 
 	a.App.BeginBlock(abci.RequestBeginBlock{
@@ -201,7 +201,7 @@ func (a *PeptideApp) OnCommit(timestamp eth.Uint64Quantity) {
 		Height:             info.LastBlockHeight + 1,
 		ValidatorsHash:     a.ValSet.Hash(),
 		NextValidatorsHash: a.ValSet.Hash(),
-		ChainID:            a.ChainId,
+		ChainID:            a.ChainId.String(),
 		Time:               time.Unix(int64(timestamp), 0),
 	}
 }
@@ -221,7 +221,7 @@ func (a *PeptideApp) SignMsgs(signers []*SignerAccount, msg ...sdk.Msg) (sdk.Tx,
 	tx, err := GenTx(a.EncodingConfig.TxConfig, msg,
 		sdk.Coins{sdk.NewInt64Coin(a.BondDenom, 0)},
 		DefaultGenTxGas,
-		a.ChainId,
+		a.ChainId.String(),
 		nil,
 		signers...,
 	)
