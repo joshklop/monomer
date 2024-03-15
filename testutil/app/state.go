@@ -142,6 +142,12 @@ func (s *State) Commit() (uint64, []byte, error) {
 	s.Lock()
 	defer s.Unlock()
 	s.Hash = hashItems(s.Values)
+	if s.persistInterval > 0 && s.Height%s.persistInterval == 0 {
+		err := s.save()
+		if err != nil {
+			return 0, nil, err
+		}
+	}
 	switch {
 	case s.Height > 0:
 		s.Height++
@@ -149,12 +155,6 @@ func (s *State) Commit() (uint64, []byte, error) {
 		s.Height = s.initialHeight
 	default:
 		s.Height = 1
-	}
-	if s.persistInterval > 0 && s.Height%s.persistInterval == 0 {
-		err := s.save()
-		if err != nil {
-			return 0, nil, err
-		}
 	}
 	return s.Height, s.Hash, nil
 }

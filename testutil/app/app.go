@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -111,26 +112,32 @@ func (app *Application) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{
 		Version:          version.ABCIVersion,
 		AppVersion:       appVersion,
-		LastBlockHeight:  int64(app.state.Height),
+		LastBlockHeight:  int64(app.state.Height)-1, // Last persisted state.
 		LastBlockAppHash: app.state.Hash,
 	}
 }
 
 // Info implements ABCI.
 func (app *Application) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	var err error
 	app.state.initialHeight = uint64(req.InitialHeight)
-	if len(req.AppStateBytes) > 0 {
-		err = app.state.Import(0, req.AppStateBytes)
-		if err != nil {
-			panic(err)
-		}
+	appStateBytes := req.AppStateBytes
+	if len(req.AppStateBytes) == 0 {
+		appStateBytes = []byte(`{}`)
 	}
+	app.state.Lock()
+	defer app.state.Unlock()
+	app.state.Values = map[string]string{}
+	if err := json.Unmarshal(appStateBytes, &app.state.Values); err != nil {
+		panic(fmt.Errorf("failed to decode imported JSON data: %w", err))
+	}
+	app.state.Height = 0
+	app.state.Hash = hashItems(app.state.Values)
 	resp := abci.ResponseInitChain{
 		AppHash: app.state.Hash,
 	}
+	var err error
 	if resp.Validators, err = app.validatorUpdates(0); err != nil {
-		panic(err)
+		panic(fmt.Errorf("validator updates: %v", err))
 	}
 	return resp
 }

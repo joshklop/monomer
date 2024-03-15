@@ -2,6 +2,8 @@ package builder
 
 import (
 	"fmt"
+	"errors"
+	"slices"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
 	bfttypes "github.com/cometbft/cometbft/types"
@@ -42,26 +44,44 @@ func New(
 }
 
 // safe and finalized may be common.Hash{}, in which case they are not updated.
-// it is assumed that all non-empty hashes exist in the block store.
+// assumptions:
+//   - all non-empty hashes exist in the block store.
+//   - finalized.Height <= safe.Height <= head.Height
 func (b *Builder) Rollback(head, safe, finalized common.Hash) error {
-	header := b.blockStore.BlockByHash(head)
-	if header == nil {
+	headBlock := b.blockStore.HeadBlock()
+	if headBlock == nil {
+		return errors.New("head block not found")
+	}
+	currentHeight := headBlock.Header.Height
+
+	block := b.blockStore.BlockByHash(head)
+	if block == nil {
 		return fmt.Errorf("block not found with hash %s", head)
 	}
-	height := header.Header.Height
+	targetHeight := block.Header.Height
 
-	b.blockStore.RollbackToHeight(height)
-	b.blockStore.UpdateLabel(eth.Unsafe, head)
+	if err := b.blockStore.RollbackToHeight(targetHeight); err != nil {
+		return fmt.Errorf("rollback block store: %v", err)
+	}
+	if err := b.blockStore.UpdateLabel(eth.Unsafe, head); err != nil {
+		return fmt.Errorf("udpate label: %v", err)
+	}
 	if safe != (common.Hash{}) {
-		b.blockStore.UpdateLabel(eth.Safe, safe)
+		if err := b.blockStore.UpdateLabel(eth.Safe, safe); err != nil {
+			return fmt.Errorf("update label: %v", err)
+		}
 	}
 	if finalized != (common.Hash{}) {
-		b.blockStore.UpdateLabel(eth.Finalized, finalized)
+		if err := b.blockStore.UpdateLabel(eth.Finalized, finalized); err != nil {
+			return fmt.Errorf("update label: %v", err)
+		}
 	}
 
-	b.txStore.RollbackToHeight(height, b.blockStore.HeadBlock().Header.Height)
+	if err := b.txStore.RollbackToHeight(targetHeight, currentHeight); err != nil {
+		return fmt.Errorf("rollback tx store: %v", err)
+	}
 
-	if err := b.app.RollbackToHeight(uint64(height)); err != nil {
+	if err := b.app.RollbackToHeight(uint64(targetHeight)); err != nil {
 		return fmt.Errorf("rollback app: %v", err)
 	}
 
@@ -76,8 +96,8 @@ type Payload struct {
 }
 
 func (b *Builder) Build(payload *Payload) error {
-	var txs bfttypes.Txs
-	copy(txs, payload.Transactions)
+	// Shallow clone is ok, we just don't want to modify payload.Transactions.
+	txs := slices.Clone(payload.Transactions)
 	for {
 		// TODO there is risk of losing txs if mempool db fails.
 		// we need to fix db consistency in general, so we're just panicing on errors for now.
@@ -98,14 +118,15 @@ func (b *Builder) Build(payload *Payload) error {
 
 	// Build header.
 	info := b.app.Info(abcitypes.RequestInfo{})
-	currentHead := b.blockStore.BlockByNumber(info.GetLastBlockHeight())
+	currentHeight := info.GetLastBlockHeight()
+	currentHead := b.blockStore.BlockByNumber(currentHeight)
 	if currentHead == nil {
-		return fmt.Errorf("block not found at height: %d", info.GetLastBlockHeight())
+		return fmt.Errorf("block not found at height: %d", currentHeight)
 	}
 	header := &eetypes.Header{
 		ChainID:    b.chainID,
 		Height:     currentHead.Header.Height + 1,
-		Time:       uint64(payload.Timestamp),
+		Time:       uint64(payload.Timestamp), // TODO should we validate timestamp is greater than the previous timestamp?
 		ParentHash: currentHead.Header.Hash,
 		AppHash:    info.GetLastBlockAppHash(),
 		GasLimit:   uint64(payload.GasLimit),
@@ -121,7 +142,7 @@ func (b *Builder) Build(payload *Payload) error {
 			Tx: tx,
 		})
 		txResults = append(txResults, &abcitypes.TxResult{
-			Height: info.GetLastBlockHeight() + 1,
+			Height: currentHeight+1,
 			Tx:     tx,
 			Index:  uint32(i),
 			Result: resp,
@@ -133,19 +154,16 @@ func (b *Builder) Build(payload *Payload) error {
 	b.app.Commit()
 
 	// Append block.
-	block := &eetypes.Block{
-		Header:    header,
-		Txs:       txs,
-		TxResults: txResults,
-	}
-	block.Hash()
-	b.blockStore.AddBlock(block)
+	b.blockStore.AddBlock(&eetypes.Block{
+		Header: header,
+		Txs:    txs,
+	})
 	// Index txs.
-	if err := b.txStore.Add(block.TxResults); err != nil {
+	if err := b.txStore.Add(txResults); err != nil {
 		return fmt.Errorf("add tx results: %v", err)
 	}
 	// Publish events.
-	for _, txResult := range block.TxResults {
+	for _, txResult := range txResults {
 		if err := b.eventBus.PublishEventTx(bfttypes.EventDataTx{
 			TxResult: *txResult,
 		}); err != nil {

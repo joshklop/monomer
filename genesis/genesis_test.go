@@ -15,21 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidate(t *testing.T) {
-	require.NoError(t, (&genesis.Genesis{
-		InitialL2Height: 1,
-	}).Validate())
-	require.ErrorContains(t, (&genesis.Genesis{}).Validate(), "initial L2 height must be non-zero")
-}
-
 func TestCommit(t *testing.T) {
 	tests := map[string]*genesis.Genesis{
 		"empty non-nil state": {
-			InitialL2Height: 1,
 			AppState: []byte{},
 		},
+		"empty non-nil state2": {
+			AppState: []byte(`{}`),
+		},
 		"nonempty state": {
-			InitialL2Height: 1,
 			AppState: func() []byte {
 				// We happen to know this is the proper way to marshal the testapp's state.
 				// It is a pity the testapp doesn't have a better way to programmatically create states.
@@ -41,11 +35,9 @@ func TestCommit(t *testing.T) {
 			}(),
 		},
 		"non-zero chain ID": {
-			InitialL2Height: 1,
 			ChainID: 1,
 		},
 		"non-zero genesis time": {
-			InitialL2Height: 1,
 			Time: 1,
 		},
 	}
@@ -60,37 +52,31 @@ func TestCommit(t *testing.T) {
 			})
 			blockStore := store.NewBlockStore(blockstoredb)
 
-			require.NoError(t, g.Validate())
 			require.NoError(t, g.Commit(app, blockStore))
 
 			// Application.
+			var state map[string]string
 			if len(g.AppState) > 0 {
 				state := make(map[string]string)
 				require.NoError(t, json.Unmarshal(g.AppState, &state))
-				// State has been committed.
-				for k, v := range state {
-					resp := app.Query(abci.RequestQuery{
-						Data: []byte(k),
-					})
-					require.Equal(t, v, string(resp.GetValue()))
-				}
 			}
+			require.NoError(t, testapp.ValuesMatch(app, state)) // State was committed.
 			info := app.Info(abci.RequestInfo{})
-			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
+			require.Equal(t, int64(0), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
 			// Even though RequestInitChain contains the chain ID, we can't test that it was set properly since the ABCI doesn't expose it.
 
 			// Block store.
 			block := &eetypes.Block{
 				Header: &eetypes.Header{
 					ChainID:  g.ChainID,
-					Height:   int64(g.InitialL2Height),
+					Height:   0,
 					Time:     g.Time,
 					AppHash:  info.GetLastBlockAppHash(),
 					GasLimit: peptide.DefaultGasLimit,
 				},
 			}
 			block.Hash()
-			require.Equal(t, block, blockStore.BlockByNumber(int64(g.InitialL2Height)))
+			require.Equal(t, block, blockStore.BlockByNumber(0))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Unsafe))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Safe))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Finalized))

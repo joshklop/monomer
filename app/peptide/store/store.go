@@ -82,19 +82,16 @@ func NewBlockStore(db dbm.DB) BlockStore {
 	}
 }
 
-var headKey = []byte("head")
+var headKey = []byte("headBlock")
 
 func (b *blockStore) HeadBlock() *eetypes.Block {
-	bz, err := b.db.Get(headKey)
-	if err != nil {
-		panic(err)
-	}
+	bz := b.get(headKey)
 	if bz == nil {
 		return nil
 	}
 	block := new(eetypes.Block)
 	if err := json.Unmarshal(bz, &block); err != nil {
-		return nil
+		panic(fmt.Errorf("unmarshal block: %v", err))
 	}
 	return block
 }
@@ -194,6 +191,15 @@ func (b *blockStore) RollbackToHeight(height int64) error {
 			return err
 		}
 	}
+	block := b.BlockByNumber(height)
+	if block == nil {
+		return fmt.Errorf("block not found at height %d", height)
+	}
+	blockBytes, err := json.Marshal(block)
+	if err != nil {
+		return fmt.Errorf("marshal block: %v", err)
+	}
+	batch.Set(headKey, blockBytes)
 	if err := batch.WriteSync(); err != nil {
 		panic(err)
 	}

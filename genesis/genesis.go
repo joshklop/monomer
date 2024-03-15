@@ -1,7 +1,6 @@
 package genesis
 
 import (
-	"errors"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -17,17 +16,6 @@ type Genesis struct {
 	Time     uint64          `json:"genesis_time"`
 	ChainID  eetypes.ChainID `json:"chain_id"`
 	AppState []byte          `json:"app_state"`
-	// InitialL2Height is usually 0 (Comet uses 1, we use 0).
-	// It may be greater than zero in the event of chain restarts.
-	// https://docs.cometbft.com/v0.38/spec/core/genesis
-	InitialL2Height uint64 `json:"initial_height"`
-}
-
-func (g *Genesis) Validate() error {
-	if g.InitialL2Height == 0 {
-		return errors.New("initial L2 height must be non-zero")
-	}
-	return nil
 }
 
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {
@@ -51,7 +39,6 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 		},
 		AppStateBytes: g.AppState,
 		Time:          time.Unix(int64(g.Time), 0),
-		InitialHeight: int64(g.InitialL2Height),
 	})
 
 	// this will store the app state into disk. Failing to call this will result in missing data the next
@@ -60,7 +47,7 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:   int64(g.InitialL2Height),
+			Height:   0,
 			ChainID:  g.ChainID,
 			Time:     g.Time,
 			AppHash:  response.AppHash,

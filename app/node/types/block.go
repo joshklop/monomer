@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	abcitypes "github.com/cometbft/cometbft/abci/types"
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -42,7 +41,6 @@ func (h *Header) ToComet() *bfttypes.Header {
 type Block struct {
 	Header    *Header               `json:"header"`
 	Txs       bfttypes.Txs          `json:"txs"`
-	TxResults []*abcitypes.TxResult `json:"tx_results"`
 }
 
 // Hash returns a unique hash of the block, used as the block identifier
