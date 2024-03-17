@@ -14,7 +14,7 @@ import (
 const Name = "module"
 
 type module struct {
-	key  *storetypes.KVStoreKey
+	key  storetypes.StoreKey
 	v1.UnimplementedMapServiceServer
 }
 

@@ -1,7 +1,6 @@
 package testapp
 
 import (
-	"fmt"
 	"encoding/json"
 	"testing"
 
@@ -57,18 +56,17 @@ func New(t testing.TB, chainID string) *App {
 		}
 
 		genesis := make(map[string]json.RawMessage)
-		if err := json.Unmarshal(appStateBytes, &genesis); err != nil {
-			panic(fmt.Errorf("unmarshal genesis: %v", err))
-		}
+		require.NoError(t, json.Unmarshal(appStateBytes, &genesis), "unmarshal genesis state")
 
 		if moduleBytes, ok := genesis[Name]; ok {
-			if err := module.Init(ctx, moduleBytes); err != nil {
-				panic(fmt.Errorf("init module %q: %v", Name, err))
-			}
+			require.NoError(t, module.Init(ctx, moduleBytes), "initialize module")
 		}
 
 		return abci.ResponseInitChain{}
 	})
+	// If we don't LoadLatestVersion, the module store won't be loaded.
+	// I don't understand the full meaning or implications of this.
+	require.NoError(t, ba.LoadLatestVersion())
 	return &App{
 		BaseApp: ba,
 	}

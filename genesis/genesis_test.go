@@ -1,6 +1,7 @@
 package genesis_test
 
 import (
+	"fmt"
 	"encoding/json"
 	"testing"
 
@@ -11,28 +12,20 @@ import (
 	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/genesis"
-	testapp "github.com/polymerdao/monomer/testutil/app"
+	"github.com/polymerdao/monomer/testutil/testapp"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCommit(t *testing.T) {
 	tests := map[string]*genesis.Genesis{
-		"empty non-nil state": {
+		"empty bytes state": {
 			AppState: []byte{},
 		},
-		"empty non-nil state2": {
+		"empty json state": {
 			AppState: []byte(`{}`),
 		},
 		"nonempty state": {
-			AppState: func() []byte {
-				// We happen to know this is the proper way to marshal the testapp's state.
-				// It is a pity the testapp doesn't have a better way to programmatically create states.
-				stateBytes, err := json.Marshal(map[string]string{
-					"test": "test",
-				})
-				require.NoError(t, err)
-				return stateBytes
-			}(),
+			AppState: []byte(fmt.Sprintf(`{"%s": { "test": "test" } }`, testapp.Name)),
 		},
 		"non-zero chain ID": {
 			ChainID: 1,
@@ -44,8 +37,8 @@ func TestCommit(t *testing.T) {
 
 	for description, g := range tests {
 		t.Run(description, func(t *testing.T) {
-			app, err := testapp.NewApplication(testapp.DefaultConfig(t.TempDir()))
-			require.NoError(t, err)
+			app := testapp.New(t, g.ChainID.String())
+
 			blockstoredb := tmdb.NewMemDB()
 			t.Cleanup(func() {
 				require.NoError(t, blockstoredb.Close())
@@ -55,28 +48,40 @@ func TestCommit(t *testing.T) {
 			require.NoError(t, g.Commit(app, blockStore))
 
 			// Application.
-			var state map[string]string
+			info := app.Info(abci.RequestInfo{})
+			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
+			state := make(map[string]map[string]string) // TODO we shouldn't be assuming format of the genesis state. (except we kind of know already because it's part of the input...?)
 			if len(g.AppState) > 0 {
-				state := make(map[string]string)
 				require.NoError(t, json.Unmarshal(g.AppState, &state))
 			}
-			require.NoError(t, testapp.ValuesMatch(app, state)) // State was committed.
-			info := app.Info(abci.RequestInfo{})
-			require.Equal(t, int64(0), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
+			gotState := make(map[string]map[string]string)
+			for moduleName, moduleState := range state {
+				gotState[moduleName] = make(map[string]string)
+				for k := range moduleState {
+					resp := app.Query(abci.RequestQuery{
+						// TODO we need a query service, or we need to make assumptions about the underlying kv layout.
+						Path: fmt.Sprintf("/%s", moduleName), // TODO I don't think this is the correct path...
+						Data: []byte(k),
+						Height: info.GetLastBlockHeight(),
+					})
+					gotState[moduleName][k] = string(resp.GetValue())
+				}
+			}
+			require.Equal(t, state, gotState)
 			// Even though RequestInitChain contains the chain ID, we can't test that it was set properly since the ABCI doesn't expose it.
 
 			// Block store.
 			block := &eetypes.Block{
 				Header: &eetypes.Header{
 					ChainID:  g.ChainID,
-					Height:   0,
+					Height:   info.GetLastBlockHeight(),
 					Time:     g.Time,
 					AppHash:  info.GetLastBlockAppHash(),
 					GasLimit: peptide.DefaultGasLimit,
 				},
 			}
 			block.Hash()
-			require.Equal(t, block, blockStore.BlockByNumber(0))
+			require.Equal(t, block, blockStore.BlockByNumber(info.GetLastBlockHeight()))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Unsafe))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Safe))
 			require.Equal(t, block, blockStore.BlockByLabel(eth.Finalized))

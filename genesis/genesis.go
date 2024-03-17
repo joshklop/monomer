@@ -4,8 +4,6 @@ import (
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide"
@@ -19,38 +17,25 @@ type Genesis struct {
 }
 
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {
-	response := app.InitChain(abci.RequestInitChain{
-		ChainId: g.ChainID.String(),
-		ConsensusParams: &tmproto.ConsensusParams{
-			Block: &tmproto.BlockParams{
-				MaxBytes: 200000,
-				MaxGas:   200000000,
-			},
-			Evidence: &tmproto.EvidenceParams{
-				MaxAgeNumBlocks: 302400,
-				MaxAgeDuration:  504 * time.Hour, // 3 weeks is the max duration
-				MaxBytes:        10000,
-			},
-			Validator: &tmproto.ValidatorParams{
-				PubKeyTypes: []string{
-					bfttypes.ABCIPubKeyTypeEd25519,
-				},
-			},
-		},
+	const initialHeight = 1
+	app.InitChain(abci.RequestInitChain{
+		ChainId:       g.ChainID.String(),
 		AppStateBytes: g.AppState,
 		Time:          time.Unix(int64(g.Time), 0),
+		// The cosmos-sdk assumes the initial height is 1. If you provide 0, it will silently modify the input to 1!
+		// Here is one issue: https://github.com/cosmos/cosmos-sdk/issues/16796#issue-1782358251
+		// It also seems that the db version will be set to 1 even if InitialHeight is 0, which causes very confusing things later on.
+		// see https://github.com/cosmos/cosmos-sdk/issues/19765
+		InitialHeight: initialHeight,
 	})
-
-	// this will store the app state into disk. Failing to call this will result in missing data the next
-	// time the app is called
-	app.Commit()
+	response := app.Commit()
 
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:   0,
+			Height:   initialHeight,
 			ChainID:  g.ChainID,
 			Time:     g.Time,
-			AppHash:  response.AppHash,
+			AppHash:  response.GetData(),
 			GasLimit: peptide.DefaultGasLimit,
 		},
 	}
