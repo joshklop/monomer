@@ -6,10 +6,10 @@ import (
 
 var _ sdk.Msg = (*SetRequest)(nil)
 
-func (s *SetRequest) ValidateBasic() error {
+func (r *SetRequest) GetSigners() []sdk.AccAddress {
 	return nil
 }
 
-func (s *SetRequest) GetSigners() []sdk.AccAddress {
+func (r *SetRequest) ValidateBasic() error {
 	return nil
 }

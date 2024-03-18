@@ -3,12 +3,12 @@ syntax = "proto3";
 package testapp.v1;
 
 message SetRequest {
-    string key = 1;
-    string value = 2;
+    string key = 2;
+    string value = 3;
 }
 
 message SetResponse {}
 
-service MapService {
+service SetService {
     rpc Set(SetRequest) returns (SetResponse) {}
 }

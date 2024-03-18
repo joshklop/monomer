@@ -19,89 +19,89 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	MapService_Set_FullMethodName = "/testapp.v1.MapService/Set"
+	SetService_Set_FullMethodName = "/testapp.v1.SetService/Set"
 )
 
-// MapServiceClient is the client API for MapService service.
+// SetServiceClient is the client API for SetService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type MapServiceClient interface {
+type SetServiceClient interface {
 	Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetResponse, error)
 }
 
-type mapServiceClient struct {
+type setServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewMapServiceClient(cc grpc.ClientConnInterface) MapServiceClient {
-	return &mapServiceClient{cc}
+func NewSetServiceClient(cc grpc.ClientConnInterface) SetServiceClient {
+	return &setServiceClient{cc}
 }
 
-func (c *mapServiceClient) Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetResponse, error) {
+func (c *setServiceClient) Set(ctx context.Context, in *SetRequest, opts ...grpc.CallOption) (*SetResponse, error) {
 	out := new(SetResponse)
-	err := c.cc.Invoke(ctx, MapService_Set_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, SetService_Set_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// MapServiceServer is the server API for MapService service.
-// All implementations must embed UnimplementedMapServiceServer
+// SetServiceServer is the server API for SetService service.
+// All implementations must embed UnimplementedSetServiceServer
 // for forward compatibility
-type MapServiceServer interface {
+type SetServiceServer interface {
 	Set(context.Context, *SetRequest) (*SetResponse, error)
-	mustEmbedUnimplementedMapServiceServer()
+	mustEmbedUnimplementedSetServiceServer()
 }
 
-// UnimplementedMapServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedMapServiceServer struct {
+// UnimplementedSetServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedSetServiceServer struct {
 }
 
-func (UnimplementedMapServiceServer) Set(context.Context, *SetRequest) (*SetResponse, error) {
+func (UnimplementedSetServiceServer) Set(context.Context, *SetRequest) (*SetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Set not implemented")
 }
-func (UnimplementedMapServiceServer) mustEmbedUnimplementedMapServiceServer() {}
+func (UnimplementedSetServiceServer) mustEmbedUnimplementedSetServiceServer() {}
 
-// UnsafeMapServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to MapServiceServer will
+// UnsafeSetServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SetServiceServer will
 // result in compilation errors.
-type UnsafeMapServiceServer interface {
-	mustEmbedUnimplementedMapServiceServer()
+type UnsafeSetServiceServer interface {
+	mustEmbedUnimplementedSetServiceServer()
 }
 
-func RegisterMapServiceServer(s grpc.ServiceRegistrar, srv MapServiceServer) {
-	s.RegisterService(&MapService_ServiceDesc, srv)
+func RegisterSetServiceServer(s grpc.ServiceRegistrar, srv SetServiceServer) {
+	s.RegisterService(&SetService_ServiceDesc, srv)
 }
 
-func _MapService_Set_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _SetService_Set_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MapServiceServer).Set(ctx, in)
+		return srv.(SetServiceServer).Set(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MapService_Set_FullMethodName,
+		FullMethod: SetService_Set_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MapServiceServer).Set(ctx, req.(*SetRequest))
+		return srv.(SetServiceServer).Set(ctx, req.(*SetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// MapService_ServiceDesc is the grpc.ServiceDesc for MapService service.
+// SetService_ServiceDesc is the grpc.ServiceDesc for SetService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var MapService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "testapp.v1.MapService",
-	HandlerType: (*MapServiceServer)(nil),
+var SetService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "testapp.v1.SetService",
+	HandlerType: (*SetServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Set",
-			Handler:    _MapService_Set_Handler,
+			Handler:    _SetService_Set_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

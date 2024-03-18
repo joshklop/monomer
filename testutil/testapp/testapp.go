@@ -44,11 +44,15 @@ func New(t testing.TB, chainID string) *App {
 	ba.MountKVStores(map[string]*storetypes.KVStoreKey{
 		Name: key,
 	})
-	
+
+	ba.GRPCQueryRouter().SetInterfaceRegistry(interfaceRegistry)
+	testappv1.RegisterGetServiceServer(ba.GRPCQueryRouter(), module)
+
 	router := baseapp.NewMsgServiceRouter()
 	router.SetInterfaceRegistry(interfaceRegistry)
-	testappv1.RegisterMapServiceServer(router, module)
+	testappv1.RegisterSetServiceServer(router, module)
 	ba.SetMsgServiceRouter(router)
+
 	ba.SetInitChainer(func(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
 		appStateBytes := req.GetAppStateBytes() 
 		if len(appStateBytes) == 0 {

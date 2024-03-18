@@ -1,10 +1,11 @@
 package genesis_test
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
 	tmdb "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -13,6 +14,7 @@ import (
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/testutil/testapp"
+	"github.com/polymerdao/monomer/testutil/testapp/gen/testapp/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +52,7 @@ func TestCommit(t *testing.T) {
 			// Application.
 			info := app.Info(abci.RequestInfo{})
 			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
-			state := make(map[string]map[string]string) // TODO we shouldn't be assuming format of the genesis state. (except we kind of know already because it's part of the input...?)
+			state := make(map[string]map[string]string)           // TODO we shouldn't be assuming format of the genesis state. (except we kind of know already because it's part of the input...?)
 			if len(g.AppState) > 0 {
 				require.NoError(t, json.Unmarshal(g.AppState, &state))
 			}
@@ -58,13 +60,19 @@ func TestCommit(t *testing.T) {
 			for moduleName, moduleState := range state {
 				gotState[moduleName] = make(map[string]string)
 				for k := range moduleState {
+					requestBytes, err := proto.Marshal(&testappv1.GetRequest{
+						Key: k,
+					})
+					require.NoError(t, err)
 					resp := app.Query(abci.RequestQuery{
-						// TODO we need a query service, or we need to make assumptions about the underlying kv layout.
-						Path: fmt.Sprintf("/%s", moduleName), // TODO I don't think this is the correct path...
-						Data: []byte(k),
+						Path:   "/testapp.v1.GetService/Get",
+						Data:   requestBytes,
 						Height: info.GetLastBlockHeight(),
 					})
-					gotState[moduleName][k] = string(resp.GetValue())
+					require.Equal(t, uint32(0), resp.GetCode(), resp.GetLog())
+					var val testappv1.GetResponse
+					require.NoError(t, proto.Unmarshal(resp.GetValue(), &val))
+					gotState[moduleName][k] = val.GetValue()
 				}
 			}
 			require.Equal(t, state, gotState)
