@@ -23,6 +23,7 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 		AppStateBytes: g.AppState,
 		Time:          time.Unix(int64(g.Time), 0),
 		// If the initial height is not set, the cosmos-sdk will silently set it to 1.
+		// https://github.com/cosmos/cosmos-sdk/issues/19765
 		InitialHeight: initialHeight,
 	})
 	response := app.Commit()
