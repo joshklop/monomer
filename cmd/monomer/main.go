@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
+	//"path/filepath"
 	"syscall"
-	"time"
+	//"time"
 
-	abciclient "github.com/cometbft/cometbft/abci/client"
-	abcitypes "github.com/cometbft/cometbft/abci/types"
-	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/polymerdao/monomer/app/node"
-	"github.com/polymerdao/monomer/app/node/server"
-	eetypes "github.com/polymerdao/monomer/app/node/types"
-	"github.com/polymerdao/monomer/app/peptide"
-	"github.com/polymerdao/monomer/app/peptide/store"
-	testapp "github.com/polymerdao/monomer/testutil/app"
+	//abciclient "github.com/cometbft/cometbft/abci/client"
+	//abcitypes "github.com/cometbft/cometbft/abci/types"
+	//"github.com/ethereum-optimism/optimism/op-service/eth"
+	//"github.com/polymerdao/monomer/app/node"
+	//"github.com/polymerdao/monomer/app/node/server"
+	//eetypes "github.com/polymerdao/monomer/app/node/types"
+	//"github.com/polymerdao/monomer/app/peptide"
+	//"github.com/polymerdao/monomer/app/peptide/store"
+	//"github.com/polymerdao/monomer/testutil/testapp"
 )
 
 type config struct {
@@ -49,7 +49,10 @@ func main() {
 }
 
 func run(ctx context.Context, cfg *config) error {
-	app, err := testapp.NewApplication(testapp.DefaultConfig(filepath.Join(cfg.DataDir, "app")))
+	return nil
+}
+	/*
+	app, err := testapp.New()
 	if err != nil {
 		return fmt.Errorf("create new application: %v", err)
 	}
@@ -112,3 +115,4 @@ func run(ctx context.Context, cfg *config) error {
 	<-ctx.Done()
 	return nil
 }
+*/

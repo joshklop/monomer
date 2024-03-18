@@ -4,9 +4,12 @@ managed:
   go_package_prefix:
     default: github.com/polymerdao/monomer/testutil/testapp/gen
 plugins:
-  - plugin: buf.build/protocolbuffers/go
+  - name: gocosmos
     out: gen
-    opt: paths=source_relative
-  - plugin: buf.build/grpc/go
-    out: gen
-    opt: paths=source_relative
+    opt: plugins=grpc,Mgoogle/protobuf/any.proto=github.com/cosmos/cosmos-sdk/codec/types,paths=source_relative
+  #- plugin: buf.build/grpc/go
+  #  out: gen
+  #  opt: paths=source_relative
+  # - plugin: buf.build/protocolbuffers/go
+  #   out: gen
+  #   opt: paths=source_relative

@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	dbm "github.com/cometbft/cometbft-db"
-	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	testappv1 "github.com/polymerdao/monomer/testutil/testapp/gen/testapp/v1"
@@ -74,4 +74,28 @@ func New(t testing.TB, chainID string) *App {
 	return &App{
 		BaseApp: ba,
 	}
+}
+
+// StateContains ensures the key-values exist in the test app's state.
+func (a *App) StateContains(t *testing.T, height uint64, kvs map[string]string) {
+	if len(kvs) == 0 {
+		return
+	}
+	gotState := make(map[string]string, len(kvs))
+	for k := range kvs {
+		requestBytes, err := (&testappv1.GetRequest{
+			Key: k,
+		}).Marshal()
+		require.NoError(t, err)
+		resp := a.Query(abci.RequestQuery{
+			Path:   "/testapp.v1.GetService/Get", // TODO is there a way to find this programmatically?
+			Data:   requestBytes,
+			Height: int64(height),
+		})
+		require.Equal(t, uint32(0), resp.GetCode(), resp.GetLog())
+		var val testappv1.GetResponse
+		require.NoError(t, (&val).Unmarshal(resp.GetValue()))
+		gotState[k] = val.GetValue()
+	}
+	require.Equal(t, gotState, kvs)
 }

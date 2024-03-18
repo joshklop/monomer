@@ -1,8 +1,8 @@
 package builder
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 	"slices"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
@@ -125,8 +125,8 @@ func (b *Builder) Build(payload *Payload) error {
 	}
 	header := &eetypes.Header{
 		ChainID:    b.chainID,
-		Height:     currentHead.Header.Height + 1,
-		Time:       uint64(payload.Timestamp), // TODO should we validate timestamp is greater than the previous timestamp?
+		Height:     currentHeight + 1,
+		Time:       uint64(payload.Timestamp), // TODO should we validate timestamp is greater than the previous timestamp? Probably should be done in engine api, if at all.
 		ParentHash: currentHead.Header.Hash,
 		AppHash:    info.GetLastBlockAppHash(),
 		GasLimit:   uint64(payload.GasLimit),
@@ -141,8 +141,11 @@ func (b *Builder) Build(payload *Payload) error {
 		resp := b.app.DeliverTx(abcitypes.RequestDeliverTx{
 			Tx: tx,
 		})
+		if resp.IsErr() {
+			return fmt.Errorf("deliver tx: %v", resp.GetLog())
+		}
 		txResults = append(txResults, &abcitypes.TxResult{
-			Height: currentHeight+1,
+			Height: currentHeight + 1,
 			Tx:     tx,
 			Index:  uint32(i),
 			Result: resp,

@@ -4,12 +4,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-var _ sdk.Msg = (*SetRequest)(nil)
-
-func (r *SetRequest) GetSigners() []sdk.AccAddress {
+func (s *SetRequest) ValidateBasic() error {
 	return nil
 }
 
-func (r *SetRequest) ValidateBasic() error {
+func (s *SetRequest) GetSigners() []sdk.AccAddress {
 	return nil
 }

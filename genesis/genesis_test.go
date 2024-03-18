@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"google.golang.org/protobuf/proto"
 	tmdb "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -14,7 +13,6 @@ import (
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/testutil/testapp"
-	"github.com/polymerdao/monomer/testutil/testapp/gen/testapp/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,23 +57,8 @@ func TestCommit(t *testing.T) {
 			gotState := make(map[string]map[string]string)
 			for moduleName, moduleState := range state {
 				gotState[moduleName] = make(map[string]string)
-				for k := range moduleState {
-					requestBytes, err := proto.Marshal(&testappv1.GetRequest{
-						Key: k,
-					})
-					require.NoError(t, err)
-					resp := app.Query(abci.RequestQuery{
-						Path:   "/testapp.v1.GetService/Get",
-						Data:   requestBytes,
-						Height: info.GetLastBlockHeight(),
-					})
-					require.Equal(t, uint32(0), resp.GetCode(), resp.GetLog())
-					var val testappv1.GetResponse
-					require.NoError(t, proto.Unmarshal(resp.GetValue(), &val))
-					gotState[moduleName][k] = val.GetValue()
-				}
+				app.StateContains(t, uint64(info.GetLastBlockHeight()), moduleState)
 			}
-			require.Equal(t, state, gotState)
 			// Even though RequestInitChain contains the chain ID, we can't test that it was set properly since the ABCI doesn't expose it.
 
 			// Block store.

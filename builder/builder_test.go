@@ -16,7 +16,7 @@ import (
 	"github.com/polymerdao/monomer/builder"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/mempool"
-	testapp "github.com/polymerdao/monomer/testutil/app"
+	"github.com/polymerdao/monomer/testutil/testapp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,8 +64,8 @@ func TestBuild(t *testing.T) {
 
 	for description, test := range tests {
 		t.Run(description, func(t *testing.T) {
-			inclusionListTxs := testapp.ToTxs(test.inclusionList)
-			mempoolTxs := testapp.ToTxs(test.mempool)
+			inclusionListTxs := testapp.ToTxs(t, test.inclusionList)
+			mempoolTxs := testapp.ToTxs(t, test.mempool)
 
 			mempooldb := tmdb.NewMemDB()
 			t.Cleanup(func() {
@@ -88,8 +88,9 @@ func TestBuild(t *testing.T) {
 			})
 			txStore := txstore.NewTxStore(txdb)
 
-			app, err := testapp.NewApplication(testapp.DefaultConfig(t.TempDir()))
-			require.NoError(t, err)
+			g := &genesis.Genesis{}
+
+			app := testapp.New(t, g.ChainID.String())
 
 			eventBus := bfttypes.NewEventBus()
 			require.NoError(t, eventBus.Start())
@@ -99,9 +100,7 @@ func TestBuild(t *testing.T) {
 			subscription, err := eventBus.Subscribe(context.Background(), "test", &queryAll{}, len(test.mempool)+len(test.inclusionList)+1)
 			require.NoError(t, err)
 
-			g := &genesis.Genesis{}
 			require.NoError(t, g.Commit(app, blockStore))
-			appHash := app.Info(abcitypes.RequestInfo{}).LastBlockAppHash
 
 			b := builder.New(
 				pool,
@@ -117,22 +116,28 @@ func TestBuild(t *testing.T) {
 				GasLimit:     0,
 				Timestamp:    g.Time + 1,
 			}
+			preBuildInfo := app.Info(abcitypes.RequestInfo{})
 			require.NoError(t, b.Build(payload))
+			postBuildInfo := app.Info(abcitypes.RequestInfo{})
 
 			// Application.
-			require.NoError(t, testapp.ValuesMatch(app, test.inclusionList), "all txs in inclusion list should be executed")
-			require.NoError(t, testapp.ValuesMatch(app, test.mempool), "all txs in mempool should be executed")
+			{
+				height := uint64(postBuildInfo.GetLastBlockHeight())
+				app.StateContains(t, height, test.inclusionList)
+				app.StateContains(t, height, test.mempool)
+			}
 
 			// Block store.
-			genesisBlock := blockStore.BlockByNumber(0)
+			genesisBlock := blockStore.BlockByNumber(1)
+			require.NotNil(t, genesisBlock)
 			gotBlock := blockStore.HeadBlock()
 			wantBlock := &eetypes.Block{
 				Header: &eetypes.Header{
 					ChainID:    g.ChainID,
-					Height:     1,
+					Height:     postBuildInfo.GetLastBlockHeight(),
 					Time:       payload.Timestamp,
 					ParentHash: genesisBlock.Hash(),
-					AppHash:    appHash,
+					AppHash:    preBuildInfo.GetLastBlockAppHash(),
 					GasLimit:   payload.GasLimit,
 				},
 				Txs: bfttypes.ToTxs(append(inclusionListTxs, mempoolTxs...)),
@@ -140,31 +145,28 @@ func TestBuild(t *testing.T) {
 			wantBlock.Hash()
 			require.Equal(t, wantBlock, gotBlock)
 
-			// Tx store.
-			var txResults []*abcitypes.TxResult
+			// Tx store and event bus.
+			eventChan := subscription.Out()
+			require.Len(t, eventChan, len(wantBlock.Txs))
 			for i, tx := range wantBlock.Txs {
+				checkTxResult := func(got abcitypes.TxResult) {
+					// We don't check the full result, which would be difficult and a bit overkill.
+					// We only verify that the main info is correct.
+					require.Equal(t, uint32(i), got.Index)
+					require.Equal(t, wantBlock.Header.Height, got.Height)
+					require.Equal(t, tx, bfttypes.Tx(got.Tx))
+				}
+
+				// Tx store.
 				got, err := txStore.Get(tx.Hash())
 				require.NoError(t, err)
-				result := &abcitypes.TxResult{
-					Height: wantBlock.Header.Height,
-					Index:  uint32(i),
-					Tx:     tx,
-					Result: testapp.SuccessfulDeliverTx,
-				}
-				require.Equal(t, result, got)
-				txResults = append(txResults, result)
-			}
+				checkTxResult(*got)
 
-			// Event bus.
-			eventChan := subscription.Out()
-			require.Len(t, eventChan, len(txResults))
-			for _, result := range txResults {
+				// Event bus.
 				event := <-eventChan
 				data := event.Data()
 				require.IsType(t, bfttypes.EventDataTx{}, data)
-				require.Equal(t, bfttypes.EventDataTx{
-					TxResult: *result,
-				}, data.(bfttypes.EventDataTx))
+				checkTxResult(data.(bfttypes.EventDataTx).TxResult)
 			}
 			require.NoError(t, subscription.Err())
 		})
@@ -172,16 +174,6 @@ func TestBuild(t *testing.T) {
 }
 
 func TestRollback(t *testing.T) {
-	// 1:
-	//  - unsafe, safe, finalized updated to block 2
-	//  - rollback all labels to block 1
-	// 2:
-	//  - unsafe, safe to block 2
-	//  - rollback unsafe and safe to block 1
-	// 3:
-	//  - unsafe to block 2
-	//  - rollback unsafe to block 1
-
 	tests := map[string]struct {
 		update   []eth.BlockLabel
 		rollback []eth.BlockLabel
@@ -220,8 +212,9 @@ func TestRollback(t *testing.T) {
 			})
 			txStore := txstore.NewTxStore(txdb)
 
-			app, err := testapp.NewApplication(testapp.DefaultConfig(t.TempDir()))
-			require.NoError(t, err)
+			g := &genesis.Genesis{}
+
+			app := testapp.New(t, g.ChainID.String())
 
 			eventBus := bfttypes.NewEventBus()
 			require.NoError(t, eventBus.Start())
@@ -229,7 +222,6 @@ func TestRollback(t *testing.T) {
 				require.NoError(t, eventBus.Stop())
 			})
 
-			g := &genesis.Genesis{}
 			require.NoError(t, g.Commit(app, blockStore))
 
 			b := builder.New(
@@ -246,18 +238,18 @@ func TestRollback(t *testing.T) {
 			}
 			require.NoError(t, b.Build(&builder.Payload{
 				Timestamp:    g.Time + 1,
-				Transactions: bfttypes.ToTxs(testapp.ToTxs(kvs)),
+				Transactions: bfttypes.ToTxs(testapp.ToTxs(t, kvs)),
 			}))
 			block := blockStore.HeadBlock()
 			require.NotNil(t, block)
 			for _, label := range test.update {
 				require.NoError(t, blockStore.UpdateLabel(label, block.Hash()))
 			}
-			genesisBlock := blockStore.BlockByNumber(0)
+			genesisBlock := blockStore.BlockByNumber(1) // TODO height should be retrieved from info. Or just get head block before building.
 
 			{
 				hashes := map[eth.BlockLabel]common.Hash{
-					eth.Unsafe:    block.Hash(),
+					eth.Unsafe: block.Hash(),
 				}
 				for _, label := range test.rollback {
 					hashes[label] = genesisBlock.Hash()
@@ -276,11 +268,11 @@ func TestRollback(t *testing.T) {
 			// Block store.
 			headBlock := blockStore.HeadBlock()
 			require.NotNil(t, headBlock)
-			require.Equal(t, 0, uint64(headBlock.Header.Height))
+			require.Equal(t, uint64(1), uint64(headBlock.Header.Height)) // TODO should be from info
 			// We trust that the other parts of a block store rollback were done as well.
 
 			// Tx store.
-			for _, tx := range bfttypes.ToTxs(testapp.ToTxs(kvs)) {
+			for _, tx := range bfttypes.ToTxs(testapp.ToTxs(t, kvs)) {
 				result, err := txStore.Get(tx.Hash())
 				require.NoError(t, err)
 				require.Nil(t, result)

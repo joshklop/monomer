@@ -22,10 +22,7 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 		ChainId:       g.ChainID.String(),
 		AppStateBytes: g.AppState,
 		Time:          time.Unix(int64(g.Time), 0),
-		// The cosmos-sdk assumes the initial height is 1. If you provide 0, it will silently modify the input to 1!
-		// Here is one issue: https://github.com/cosmos/cosmos-sdk/issues/16796#issue-1782358251
-		// It also seems that the db version will be set to 1 even if InitialHeight is 0, which causes very confusing things later on.
-		// see https://github.com/cosmos/cosmos-sdk/issues/19765
+		// If the initial height is not set, the cosmos-sdk will silently set it to 1.
 		InitialHeight: initialHeight,
 	})
 	response := app.Commit()
