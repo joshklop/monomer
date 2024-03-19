@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/beacon/engine"
@@ -78,7 +79,7 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 		reorg = true
 	}
 
-	// TODO I don't think using InvalidForkChoiceState everywhere makes sense.
+	// TODO check errors with spec
 
 	// update canonical block head
 	if err := e.blockStore.UpdateLabel(eth.Unsafe, fcs.HeadBlockHash); err != nil {
@@ -98,30 +99,24 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 		}
 	}
 
-	// OpNode providing a new payload with reorg
-	if reorg {
-		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.blockStore.HeadBlock().Header.Height+1)
-		payloadId, err := payload.GetPayloadID()
-		if err != nil {
-			return nil, engine.InvalidPayloadAttributes.With(err)
-		}
-		// TODO: handle error of SavePayload
-		if err := e.payloadStore.Add(payload); err != nil {
-			return nil, engine.InvalidPayloadAttributes.With(err) // TODO better error
-		}
-		// TODO: use one method for both cases: payload.Valid()
-		return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, payloadId), nil
-	}
-
-	// start new payload mode
 	if eetypes.HasPayloadAttributes(&pa) {
-		// TODO check for invalid txs in pa
+		// TODO complete payload validation
 		payload := eetypes.NewPayload(&pa, fcs.HeadBlockHash, e.blockStore.HeadBlock().Header.Height+1)
 		payloadId, err := payload.GetPayloadID()
 		if err != nil {
-			return nil, engine.InvalidPayloadAttributes.With(err)
+			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("get payload id: %v", err))
 		}
-		return payload.Valid(payloadId), nil
+		if err := e.payloadStore.Add(payload); err != nil {
+			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("add payload to store: %v", err))
+		}
+
+		var headBlockHash common.Hash
+		if reorg {
+			headBlockHash = fcs.HeadBlockHash
+		} else {
+			headBlockHash = payload.ParentHash
+		}
+		return eetypes.ValidForkchoiceUpdateResult(&headBlockHash, payloadId), nil
 	}
 
 	// OpNode providing an existing payload, which only updates the head latest/unsafe block pointer
@@ -137,7 +132,7 @@ func (e *EngineAPI) GetPayloadV2(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 	return e.GetPayloadV3(payloadID)
 }
 
-// OpNode sequencer calls this API to seal a new block
+// GetPayloadV3 seals a payload that is currently being built (i.e. was introduced in the PayloadAttributes from a previous ForkchoiceUpdated call).
 func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
@@ -145,20 +140,21 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 	payload, ok := e.payloadStore.Get(payloadID)
 	if !ok {
 		return nil, eetypes.UnknownPayload
-	}
-	if payload != e.payloadStore.Current() {
+	} else if payload != e.payloadStore.Current() { // TODO should probably check by id, not address
 		return nil, engine.InvalidParams.With(fmt.Errorf("payload is not current"))
 	}
-
-	// e.mutex.Lock()
-	// defer e.mutex.Unlock()
-
-	// e.debugL1UserTxs(payload.Attrs.Transactions, "EngineGetPayload")
 
 	// TODO: handle time slot based block production
 	// for now assume block is sealed by this call
 	if err := e.builder.Build(&builder.Payload{
-		Transactions: payload.Attrs.Transactions, // TODO fix
+		Transactions: func() bfttypes.Txs {
+			var txs bfttypes.Txs
+			for _, tx := range payload.Attrs.Transactions {
+				txs = append(txs, bfttypes.Tx(tx))
+			}
+			// TODO we want to make a tx compatible with the rollup module.
+			return txs
+		}(),
 		GasLimit: func() uint64 {
 			if payload.Attrs.GasLimit == nil {
 				return peptide.DefaultGasLimit
@@ -166,9 +162,9 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 			return uint64(*payload.Attrs.GasLimit)
 		}(),
 		Timestamp: uint64(payload.Attrs.Timestamp),
-		// TODO Ignoring the NoTxPool option for now.
-	}); err != nil {
-		log.Panicf("failed to commit block: %v", err) // TODO error handling
+		// TODO Ignoring the NoTxPool option for now. Maybe other options as well?
+	}); err != nil { 
+		log.Panicf("failed to commit block: %v", err) // TODO error handling. this is potentially a big problem.
 	}
 
 	return payload.ToExecutionPayloadEnvelope(e.blockStore.HeadBlock().Hash()), nil
@@ -182,12 +178,15 @@ func (e *EngineAPI) NewPayloadV2(payload eth.ExecutionPayload) (*eth.PayloadStat
 	return e.NewPayloadV3(payload)
 }
 
+// NewPayloadV3 ensures the payload's block hash is present in the block store.
 func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStatusV1, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
 	if e.blockStore.BlockByHash(payload.BlockHash) == nil {
-		return &eth.PayloadStatusV1{Status: eth.ExecutionInvalidBlockHash}, engine.InvalidParams.With(errors.New("block not found"))
+		return &eth.PayloadStatusV1{
+			Status: eth.ExecutionInvalidBlockHash,
+		}, engine.InvalidParams.With(errors.New("block not found"))
 	}
 	headBlockHash := e.blockStore.HeadBlock().Hash()
 	return &eth.PayloadStatusV1{

@@ -91,7 +91,8 @@ func (b *Builder) Rollback(head, safe, finalized common.Hash) error {
 type Payload struct {
 	// Transactions functions as an inclusion list.
 	Transactions bfttypes.Txs
-	GasLimit     uint64
+	// TODO: make the gas limit actually be enforced. Need to translate between cosmos and op gas limit.
+	GasLimit     uint64 
 	Timestamp    uint64
 }
 

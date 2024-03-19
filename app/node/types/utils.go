@@ -57,7 +57,7 @@ func (p *Payload) GetPayloadID() (*PayloadID, error) {
 
 	pa := p.Attrs
 	if pa.GasLimit == nil {
-		return nil, fmt.Errorf("missing GasLimit attribute")
+		return nil, fmt.Errorf("missing GasLimit attribute") // TODO should not be error probably
 	}
 
 	hasher := sha256.New()
