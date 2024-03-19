@@ -27,16 +27,16 @@ type TxStore interface {
 }
 
 type txstore struct {
-	db     dbm.DB
-	idx    txindex.TxIndexer
+	db  dbm.DB
+	idx txindex.TxIndexer
 }
 
 var _ TxStore = (*txstore)(nil)
 
 func NewTxStore(db dbm.DB) TxStore {
 	return &txstore{
-		db:     db,
-		idx:    kv.NewTxIndex(db),
+		db:  db,
+		idx: kv.NewTxIndex(db),
 	}
 }
 

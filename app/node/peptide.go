@@ -161,9 +161,9 @@ func InitChain(app peptide.Application, blockStore store.BlockStore, genesis *Pe
 	}
 
 	block := &eetypes.Block{
-		Txs:    []bfttypes.Tx{l1TxBytes},
+		Txs: []bfttypes.Tx{l1TxBytes},
 		// TODO
-		//Header: peptide.Init(app, genesis.ChainID, genesis.AppState, genesis.InitialL2Height, genesis.GenesisTime),
+		// Header: peptide.Init(app, genesis.ChainID, genesis.AppState, genesis.InitialL2Height, genesis.GenesisTime),
 	}
 	hash := block.Hash() // Also sets the block hash.
 	blockStore.AddBlock(block)

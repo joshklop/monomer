@@ -1,4 +1,4 @@
-package testapp
+package testmodule
 
 import (
 	"context"
@@ -13,31 +13,34 @@ import (
 
 const Name = "module"
 
-type module struct {
-	key  storetypes.StoreKey
+type Module struct {
+	key storetypes.StoreKey
 	testappv1.UnimplementedSetServiceServer
 	testappv1.UnimplementedGetServiceServer
 }
 
-func newModule(key *storetypes.KVStoreKey) *module {
-	return &module{
+func New(key *storetypes.KVStoreKey) *Module {
+	return &Module{
 		key: key,
 	}
 }
 
-func (m *module) Init(ctx sdk.Context, data json.RawMessage) error {
+func (m *Module) Init(ctx sdk.Context, data json.RawMessage) error {
+	if data == nil {
+		return nil
+	}
 	genesis := make(map[string]string)
 	if err := json.Unmarshal(data, &genesis); err != nil {
 		return fmt.Errorf("unmarshal genesis data: %v", err)
 	}
 	store := ctx.KVStore(m.key)
 	for k, v := range genesis {
-		store.Set([]byte(k), []byte(v))	
+		store.Set([]byte(k), []byte(v))
 	}
 	return nil
 }
 
-func (m *module) Get(ctx context.Context, req *testappv1.GetRequest) (*testappv1.GetResponse, error) {
+func (m *Module) Get(ctx context.Context, req *testappv1.GetRequest) (*testappv1.GetResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	key := req.GetKey()
 	if key == "" {
@@ -48,7 +51,7 @@ func (m *module) Get(ctx context.Context, req *testappv1.GetRequest) (*testappv1
 	}, nil
 }
 
-func (m *module) Set(ctx context.Context, req *testappv1.SetRequest) (*testappv1.SetResponse, error) {
+func (m *Module) Set(ctx context.Context, req *testappv1.SetRequest) (*testappv1.SetResponse, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	key := req.GetKey()
 	if key == "" {

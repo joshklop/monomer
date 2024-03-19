@@ -27,8 +27,8 @@ func (s *genesisTestSuite) SetupTest() {
 	s.homedir = homedir
 	s.genesis = &PeptideGenesis{
 		GenesisTime: time.Unix(1699473809, 0).UTC(),
-		ChainID:  "123",
-		AppState: []byte("state"),
+		ChainID:     "123",
+		AppState:    []byte("state"),
 		L1: eth.BlockID{
 			Hash:   common.HexToHash("0x3"),
 			Number: 4,

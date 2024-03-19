@@ -27,7 +27,7 @@ type Application interface {
 	CheckTx(abci.RequestCheckTx) abci.ResponseCheckTx // Validate a tx for the mempool
 
 	// Consensus Connection
-	InitChain(abci.RequestInitChain) abci.ResponseInitChain // Initialize blockchain w validators/other info from CometBFT
+	InitChain(abci.RequestInitChain) abci.ResponseInitChain    // Initialize blockchain w validators/other info from CometBFT
 	BeginBlock(abci.RequestBeginBlock) abci.ResponseBeginBlock // Signals the beginning of a block
 	DeliverTx(abci.RequestDeliverTx) abci.ResponseDeliverTx    // Deliver a tx for full processing
 	EndBlock(abci.RequestEndBlock) abci.ResponseEndBlock       // Signals the end of a block, returns changes to the validator set

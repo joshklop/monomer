@@ -13,6 +13,7 @@ import (
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/testutil/testapp"
+	"github.com/polymerdao/monomer/testutil/testapp/x/testmodule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +26,7 @@ func TestCommit(t *testing.T) {
 			AppState: []byte(`{}`),
 		},
 		"nonempty state": {
-			AppState: []byte(fmt.Sprintf(`{"%s": { "test": "test" } }`, testapp.Name)),
+			AppState: []byte(fmt.Sprintf(`{"%s": { "test": "test" } }`, testmodule.Name)),
 		},
 		"non-zero chain ID": {
 			ChainID: 1,
@@ -37,7 +38,7 @@ func TestCommit(t *testing.T) {
 
 	for description, g := range tests {
 		t.Run(description, func(t *testing.T) {
-			app := testapp.New(t, g.ChainID.String())
+			app := testapp.NewTest(t, g.ChainID.String())
 
 			blockstoredb := tmdb.NewMemDB()
 			t.Cleanup(func() {
@@ -50,7 +51,7 @@ func TestCommit(t *testing.T) {
 			// Application.
 			info := app.Info(abci.RequestInfo{})
 			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
-			state := make(map[string]map[string]string)           // TODO we shouldn't be assuming format of the genesis state. (except we kind of know already because it's part of the input...?)
+			state := make(map[string]map[string]string)           // It is ok to assume the format of the genesis state because it is defined by the test input.
 			if len(g.AppState) > 0 {
 				require.NoError(t, json.Unmarshal(g.AppState, &state))
 			}

@@ -39,8 +39,8 @@ func (h *Header) ToComet() *bfttypes.Header {
 }
 
 type Block struct {
-	Header    *Header               `json:"header"`
-	Txs       bfttypes.Txs          `json:"txs"`
+	Header *Header      `json:"header"`
+	Txs    bfttypes.Txs `json:"txs"`
 }
 
 // Hash returns a unique hash of the block, used as the block identifier

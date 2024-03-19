@@ -90,14 +90,16 @@ func TestBuild(t *testing.T) {
 
 			g := &genesis.Genesis{}
 
-			app := testapp.New(t, g.ChainID.String())
+			app := testapp.NewTest(t, g.ChainID.String())
 
 			eventBus := bfttypes.NewEventBus()
 			require.NoError(t, eventBus.Start())
 			t.Cleanup(func() {
 				require.NoError(t, eventBus.Stop())
 			})
-			subscription, err := eventBus.Subscribe(context.Background(), "test", &queryAll{}, len(test.mempool)+len(test.inclusionList)+1)
+			// +1 because we want it to be buffered even when mempool and inclusion list are empty.
+			subChannelLen := len(test.mempool) + len(test.inclusionList) + 1
+			subscription, err := eventBus.Subscribe(context.Background(), "test", &queryAll{}, subChannelLen)
 			require.NoError(t, err)
 
 			require.NoError(t, g.Commit(app, blockStore))
@@ -128,7 +130,7 @@ func TestBuild(t *testing.T) {
 			}
 
 			// Block store.
-			genesisBlock := blockStore.BlockByNumber(1)
+			genesisBlock := blockStore.BlockByNumber(preBuildInfo.GetLastBlockHeight())
 			require.NotNil(t, genesisBlock)
 			gotBlock := blockStore.HeadBlock()
 			wantBlock := &eetypes.Block{
@@ -214,7 +216,7 @@ func TestRollback(t *testing.T) {
 
 			g := &genesis.Genesis{}
 
-			app := testapp.New(t, g.ChainID.String())
+			app := testapp.NewTest(t, g.ChainID.String())
 
 			eventBus := bfttypes.NewEventBus()
 			require.NoError(t, eventBus.Start())
@@ -245,14 +247,15 @@ func TestRollback(t *testing.T) {
 			for _, label := range test.update {
 				require.NoError(t, blockStore.UpdateLabel(label, block.Hash()))
 			}
-			genesisBlock := blockStore.BlockByNumber(1) // TODO height should be retrieved from info. Or just get head block before building.
+			genesisInfo := app.Info(abcitypes.RequestInfo{})
+			genesisHeight := genesisInfo.GetLastBlockHeight()
 
 			{
 				hashes := map[eth.BlockLabel]common.Hash{
 					eth.Unsafe: block.Hash(),
 				}
 				for _, label := range test.rollback {
-					hashes[label] = genesisBlock.Hash()
+					hashes[label] = blockStore.BlockByNumber(genesisHeight).Hash()
 				}
 				require.NoError(t, b.Rollback(hashes[eth.Unsafe], hashes[eth.Safe], hashes[eth.Finalized]))
 			}
@@ -268,7 +271,7 @@ func TestRollback(t *testing.T) {
 			// Block store.
 			headBlock := blockStore.HeadBlock()
 			require.NotNil(t, headBlock)
-			require.Equal(t, uint64(1), uint64(headBlock.Header.Height)) // TODO should be from info
+			require.Equal(t, uint64(genesisHeight), uint64(headBlock.Header.Height))
 			// We trust that the other parts of a block store rollback were done as well.
 
 			// Tx store.

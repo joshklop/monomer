@@ -16,9 +16,9 @@ func TestSetUnsafeBlock(t *testing.T) {
 	require.NotNil(t, bs)
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:        1,
+			Height:     1,
 			ParentHash: common.HexToHash("0x0"),
-			Hash: common.HexToHash("0x1"),
+			Hash:       common.HexToHash("0x1"),
 		},
 	}
 
@@ -46,9 +46,9 @@ func TestUpdateLabel(t *testing.T) {
 	require.NotNil(t, bs)
 	block := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:        1,
+			Height:     1,
 			ParentHash: common.HexToHash("0x0"),
-			Hash: common.HexToHash("0x1"),
+			Hash:       common.HexToHash("0x1"),
 		},
 	}
 
@@ -69,9 +69,9 @@ func TestUpdateLabel(t *testing.T) {
 	// only when a new unsafe block is set, the label is auto updated
 	block2 := &eetypes.Block{
 		Header: &eetypes.Header{
-			Height:        2,
+			Height:     2,
 			ParentHash: common.HexToHash("0x1"),
-			Hash: common.HexToHash("0x2"),
+			Hash:       common.HexToHash("0x2"),
 		},
 	}
 	bs.AddBlock(block2)
@@ -89,9 +89,9 @@ func TestMultipleBlocks(t *testing.T) {
 	for i := int64(1); i <= 10; i++ {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
-				Height:        i,
+				Height:     i,
 				ParentHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
-				Hash: common.HexToHash(fmt.Sprintf("0x%d", i)),
+				Hash:       common.HexToHash(fmt.Sprintf("0x%d", i)),
 			},
 		})
 	}
@@ -130,9 +130,9 @@ func TestRollback(t *testing.T) {
 	for i := int64(1); i <= 10; i++ {
 		blocks = append(blocks, &eetypes.Block{
 			Header: &eetypes.Header{
-				Height:        i,
+				Height:     i,
 				ParentHash: common.HexToHash(fmt.Sprintf("0x%d", i+1)),
-				Hash: common.HexToHash(fmt.Sprintf("0x%d", i)),
+				Hash:       common.HexToHash(fmt.Sprintf("0x%d", i)),
 			},
 		})
 	}
