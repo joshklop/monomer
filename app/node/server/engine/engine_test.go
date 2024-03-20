@@ -115,7 +115,7 @@ func TestForkchoiceUpdatedV3(t *testing.T) {
 				"without payload": {},
 			} {
 				t.Run(description, func(t *testing.T) {
-					result, err := api.ForkchoiceUpdatedV3(fcu, pa)
+					result, err := api.ForkchoiceUpdatedV3(fcu, &pa)
 					require.NoError(t, err)
 					postGenesisBlockHash := postGenesisBlock.Hash()
 					require.Equal(t, eetypes.ValidForkchoiceUpdateResult(&postGenesisBlockHash, nil), result)
@@ -126,14 +126,14 @@ func TestForkchoiceUpdatedV3(t *testing.T) {
 
 	result, err := api.ForkchoiceUpdatedV3(eth.ForkchoiceState{
 		HeadBlockHash: postGenesisBlock.Hash(),
-	}, eth.PayloadAttributes{})
+	}, &eth.PayloadAttributes{})
 	require.NoError(t, err)
 	postGenesisBlockHash := postGenesisBlock.Hash()
 	require.Equal(t, eetypes.ValidForkchoiceUpdateResult(&postGenesisBlockHash, nil), result)
 
 	result, err = api.ForkchoiceUpdatedV3(eth.ForkchoiceState{
 		HeadBlockHash: genesisBlock.Hash(),
-	}, eth.PayloadAttributes{})
+	}, &eth.PayloadAttributes{})
 	require.NoError(t, err)
 	genesisBlockHash := genesisBlock.Hash()
 	require.Equal(t, eetypes.ValidForkchoiceUpdateResult(&genesisBlockHash, nil), result)

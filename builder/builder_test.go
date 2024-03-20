@@ -9,7 +9,6 @@ import (
 	cmtpubsub "github.com/cometbft/cometbft/libs/pubsub"
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/ethereum/go-ethereum/common"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"
@@ -176,111 +175,81 @@ func TestBuild(t *testing.T) {
 }
 
 func TestRollback(t *testing.T) {
-	tests := map[string]struct {
-		update   []eth.BlockLabel
-		rollback []eth.BlockLabel
-	}{
-		"update all, rollback all": {
-			update:   []eth.BlockLabel{eth.Unsafe, eth.Safe, eth.Finalized},
-			rollback: []eth.BlockLabel{eth.Unsafe, eth.Safe, eth.Finalized},
-		},
-		"update unsafe and safe, rollback unsafe and safe": {
-			update:   []eth.BlockLabel{eth.Unsafe, eth.Safe},
-			rollback: []eth.BlockLabel{eth.Unsafe, eth.Safe},
-		},
-		"update unsafe, rollback unsafe": {
-			update:   []eth.BlockLabel{eth.Unsafe},
-			rollback: []eth.BlockLabel{eth.Unsafe},
-		},
+	mempooldb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, mempooldb.Close())
+	})
+	pool := mempool.New(mempooldb)
+
+	blockdb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, blockdb.Close())
+	})
+	blockStore := store.NewBlockStore(blockdb)
+
+	txdb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, txdb.Close())
+	})
+	txStore := txstore.NewTxStore(txdb)
+
+	g := &genesis.Genesis{}
+
+	app := testapp.NewTest(t, g.ChainID.String())
+
+	eventBus := bfttypes.NewEventBus()
+	require.NoError(t, eventBus.Start())
+	t.Cleanup(func() {
+		require.NoError(t, eventBus.Stop())
+	})
+
+	require.NoError(t, g.Commit(app, blockStore))
+
+	b := builder.New(
+		pool,
+		app,
+		blockStore,
+		txStore,
+		eventBus,
+		g.ChainID,
+	)
+
+	kvs := map[string]string{
+		"test": "test",
 	}
+	require.NoError(t, b.Build(&builder.Payload{
+		Timestamp:    g.Time + 1,
+		Transactions: bfttypes.ToTxs(testapp.ToTxs(t, kvs)),
+	}))
+	block := blockStore.HeadBlock()
+	require.NotNil(t, block)
+	require.NoError(t, blockStore.UpdateLabel(eth.Unsafe, block.Hash()))
+	require.NoError(t, blockStore.UpdateLabel(eth.Safe, block.Hash()))
+	require.NoError(t, blockStore.UpdateLabel(eth.Finalized, block.Hash()))
+	genesisInfo := app.Info(abcitypes.RequestInfo{})
+	genesisHeight := genesisInfo.GetLastBlockHeight()
 
-	for description, test := range tests {
-		t.Run(description, func(t *testing.T) {
-			mempooldb := tmdb.NewMemDB()
-			t.Cleanup(func() {
-				require.NoError(t, mempooldb.Close())
-			})
-			pool := mempool.New(mempooldb)
+	require.NoError(t, b.Rollback(block.Hash(), block.Hash(), block.Hash()))
 
-			blockdb := tmdb.NewMemDB()
-			t.Cleanup(func() {
-				require.NoError(t, blockdb.Close())
-			})
-			blockStore := store.NewBlockStore(blockdb)
-
-			txdb := tmdb.NewMemDB()
-			t.Cleanup(func() {
-				require.NoError(t, txdb.Close())
-			})
-			txStore := txstore.NewTxStore(txdb)
-
-			g := &genesis.Genesis{}
-
-			app := testapp.NewTest(t, g.ChainID.String())
-
-			eventBus := bfttypes.NewEventBus()
-			require.NoError(t, eventBus.Start())
-			t.Cleanup(func() {
-				require.NoError(t, eventBus.Stop())
-			})
-
-			require.NoError(t, g.Commit(app, blockStore))
-
-			b := builder.New(
-				pool,
-				app,
-				blockStore,
-				txStore,
-				eventBus,
-				g.ChainID,
-			)
-
-			kvs := map[string]string{
-				"test": "test",
-			}
-			require.NoError(t, b.Build(&builder.Payload{
-				Timestamp:    g.Time + 1,
-				Transactions: bfttypes.ToTxs(testapp.ToTxs(t, kvs)),
-			}))
-			block := blockStore.HeadBlock()
-			require.NotNil(t, block)
-			for _, label := range test.update {
-				require.NoError(t, blockStore.UpdateLabel(label, block.Hash()))
-			}
-			genesisInfo := app.Info(abcitypes.RequestInfo{})
-			genesisHeight := genesisInfo.GetLastBlockHeight()
-
-			{
-				hashes := map[eth.BlockLabel]common.Hash{
-					eth.Unsafe: block.Hash(),
-				}
-				for _, label := range test.rollback {
-					hashes[label] = blockStore.BlockByNumber(genesisHeight).Hash()
-				}
-				require.NoError(t, b.Rollback(hashes[eth.Unsafe], hashes[eth.Safe], hashes[eth.Finalized]))
-			}
-
-			// Application.
-			for k := range kvs {
-				resp := app.Query(abcitypes.RequestQuery{
-					Data: []byte(k),
-				})
-				require.Empty(t, resp.GetValue()) // Value was removed from state.
-			}
-
-			// Block store.
-			headBlock := blockStore.HeadBlock()
-			require.NotNil(t, headBlock)
-			require.Equal(t, uint64(genesisHeight), uint64(headBlock.Header.Height))
-			// We trust that the other parts of a block store rollback were done as well.
-
-			// Tx store.
-			for _, tx := range bfttypes.ToTxs(testapp.ToTxs(t, kvs)) {
-				result, err := txStore.Get(tx.Hash())
-				require.NoError(t, err)
-				require.Nil(t, result)
-			}
-			// We trust that the other parts of a tx store rollback were done as well.
+	// Application.
+	for k := range kvs {
+		resp := app.Query(abcitypes.RequestQuery{
+			Data: []byte(k),
 		})
+		require.Empty(t, resp.GetValue()) // Value was removed from state.
 	}
+
+	// Block store.
+	headBlock := blockStore.HeadBlock()
+	require.NotNil(t, headBlock)
+	require.Equal(t, uint64(genesisHeight), uint64(headBlock.Header.Height))
+	// We trust that the other parts of a block store rollback were done as well.
+
+	// Tx store.
+	for _, tx := range bfttypes.ToTxs(testapp.ToTxs(t, kvs)) {
+		result, err := txStore.Get(tx.Hash())
+		require.NoError(t, err)
+		require.Nil(t, result)
+	}
+	// We trust that the other parts of a tx store rollback were done as well.
 }

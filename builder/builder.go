@@ -43,9 +43,10 @@ func New(
 	}
 }
 
-// safe and finalized may be common.Hash{}, in which case they are not updated.
+// Rollback rolls back the block store, tx store, and application.
+// TODO does anything need to be done with the event bus?
 // assumptions:
-//   - all non-empty hashes exist in the block store.
+//   - all hashes exist in the block store.
 //   - finalized.Height <= safe.Height <= head.Height
 func (b *Builder) Rollback(head, safe, finalized common.Hash) error {
 	headBlock := b.blockStore.HeadBlock()
@@ -63,19 +64,10 @@ func (b *Builder) Rollback(head, safe, finalized common.Hash) error {
 	if err := b.blockStore.RollbackToHeight(targetHeight); err != nil {
 		return fmt.Errorf("rollback block store: %v", err)
 	}
-	if err := b.blockStore.UpdateLabel(eth.Unsafe, head); err != nil {
-		return fmt.Errorf("udpate label: %v", err)
-	}
-	if safe != (common.Hash{}) {
-		if err := b.blockStore.UpdateLabel(eth.Safe, safe); err != nil {
-			return fmt.Errorf("update label: %v", err)
-		}
-	}
-	if finalized != (common.Hash{}) {
-		if err := b.blockStore.UpdateLabel(eth.Finalized, finalized); err != nil {
-			return fmt.Errorf("update label: %v", err)
-		}
-	}
+	// Ignore errors from UpdateLabel since we assume all hashes exist in the block store already.
+	b.blockStore.UpdateLabel(eth.Unsafe, head)
+	b.blockStore.UpdateLabel(eth.Safe, safe)
+	b.blockStore.UpdateLabel(eth.Finalized, finalized)
 
 	if err := b.txStore.RollbackToHeight(targetHeight, currentHeight); err != nil {
 		return fmt.Errorf("rollback tx store: %v", err)

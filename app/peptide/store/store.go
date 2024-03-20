@@ -120,6 +120,7 @@ func (b *blockStore) AddBlock(block *eetypes.Block) {
 	}
 }
 
+// UpdateLabel returns an error only when the block hash is not found in the block store.
 func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash common.Hash) error {
 	found, err := b.db.Has(hashKey(hash))
 	if err != nil {
@@ -129,7 +130,7 @@ func (b *blockStore) UpdateLabel(label eth.BlockLabel, hash common.Hash) error {
 		return fmt.Errorf("block not found hash: %x", hash)
 	}
 	if err := b.db.SetSync(labelKey(label), hash[:]); err != nil {
-		panic(err)
+		panic(fmt.Errorf("set sync: %v", err))
 	}
 	return nil
 }

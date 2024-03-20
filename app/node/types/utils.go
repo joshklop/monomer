@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
@@ -34,8 +33,6 @@ type Payload struct {
 	ParentHash common.Hash
 	Height     int64
 	id         *PayloadID
-	idErr      error
-	cosmosTxs  []bfttypes.Tx
 }
 
 // NewPayload creates a new Payload from a PayloadAttributes and a head block hash.
@@ -74,9 +71,7 @@ func (p *Payload) GetPayloadID() (*PayloadID, error) {
 		for i, txData := range pa.Transactions {
 			var tx ethtypes.Transaction
 			if err := tx.UnmarshalBinary(txData); err != nil {
-				p.idErr = fmt.Errorf("failed to unmarshal eth transaction with index: %d", i)
-				p.id = nil
-				return nil, p.idErr
+				return nil, fmt.Errorf("failed to unmarshal eth transaction with index: %d", i)
 			}
 			hasher.Write(tx.Hash().Bytes())
 		}
@@ -86,11 +81,6 @@ func (p *Payload) GetPayloadID() (*PayloadID, error) {
 	copy(out[:], hasher.Sum(nil)[:8])
 	p.id = &out
 	return &out, nil
-}
-
-// Valid returns a valid ForkchoiceUpdateResult
-func (p *Payload) Valid(id *PayloadID) *eth.ForkchoiceUpdatedResult {
-	return ValidForkchoiceUpdateResult(&p.ParentHash, id)
 }
 
 // ToExecutionPayloadEnvelope converts a Payload to an ExecutionPayload.

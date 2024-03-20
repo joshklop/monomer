@@ -411,15 +411,6 @@ func (cs *PeptideNode) GetBlock(id any) (*eetypes.Block, error) {
 	return block, nil
 }
 
-func (cs *PeptideNode) UpdateLabel(label eth.BlockLabel, hash common.Hash) error {
-	cs.logger.Debug("trying: PeptideNode.UpdateLabel", "label", label, "hash", hash)
-	cs.lock.Lock()
-	defer cs.lock.Unlock()
-	cs.logger.Debug("PeptideNode.UpdateLabel", "label", label, "hash", hash)
-
-	return cs.bs.UpdateLabel(label, hash)
-}
-
 // deliverTxs delivers all txs to the chainApp.
 //   - This cause pending chainApp state changes, but does not commit the changes.
 //   - App-level tx error will not be bubbled up, but will be included in the tx response for tx events listners and tx quries.
