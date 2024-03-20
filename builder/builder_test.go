@@ -204,6 +204,7 @@ func TestRollback(t *testing.T) {
 	})
 
 	require.NoError(t, g.Commit(app, blockStore))
+	genesisBlock := blockStore.HeadBlock()
 
 	b := builder.New(
 		pool,
@@ -226,10 +227,8 @@ func TestRollback(t *testing.T) {
 	require.NoError(t, blockStore.UpdateLabel(eth.Unsafe, block.Hash()))
 	require.NoError(t, blockStore.UpdateLabel(eth.Safe, block.Hash()))
 	require.NoError(t, blockStore.UpdateLabel(eth.Finalized, block.Hash()))
-	genesisInfo := app.Info(abcitypes.RequestInfo{})
-	genesisHeight := genesisInfo.GetLastBlockHeight()
 
-	require.NoError(t, b.Rollback(block.Hash(), block.Hash(), block.Hash()))
+	require.NoError(t, b.Rollback(genesisBlock.Hash(), genesisBlock.Hash(), genesisBlock.Hash()))
 
 	// Application.
 	for k := range kvs {
@@ -242,7 +241,7 @@ func TestRollback(t *testing.T) {
 	// Block store.
 	headBlock := blockStore.HeadBlock()
 	require.NotNil(t, headBlock)
-	require.Equal(t, uint64(genesisHeight), uint64(headBlock.Header.Height))
+	require.Equal(t, uint64(genesisBlock.Header.Height), uint64(headBlock.Header.Height))
 	// We trust that the other parts of a block store rollback were done as well.
 
 	// Tx store.
