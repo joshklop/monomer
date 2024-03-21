@@ -3,20 +3,13 @@ package server
 import (
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 
-	tmlog "github.com/cometbft/cometbft/libs/log"
 	cmtnet "github.com/cometbft/cometbft/libs/net"
 	"github.com/cometbft/cometbft/libs/service"
+	tmlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/samber/lo"
 )
-
-type Logger = tmlog.Logger
-
-var DefaultLogger = func() Logger {
-	return tmlog.NewTMLogger(tmlog.NewSyncWriter(os.Stdout))
-}
 
 type Endpoint struct {
 	Host     string // host:port
@@ -60,11 +53,11 @@ type CompositeService struct {
 var _ service.Service = (*CompositeService)(nil)
 
 // NewCompositeService creates a new CompositeService with the given services.
-func NewCompositeService(services ...service.Service) *CompositeService {
+func NewCompositeService(logger tmlog.Logger, services ...service.Service) *CompositeService {
 	cs := &CompositeService{
 		services: services,
 	}
-	cs.BaseService = *service.NewBaseService(DefaultLogger(), "CompositeService", cs)
+	cs.BaseService = *service.NewBaseService(logger, "CompositeService", cs)
 	return cs
 }
 

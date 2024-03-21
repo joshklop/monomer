@@ -47,16 +47,6 @@ type NodeInfo struct {
 	Time        time.Time
 }
 
-// NewNodeInfo returns a new nodeInfo with current time.
-func NewNodeInfo(blockHash, appHash []byte, blockHeight int64) NodeInfo {
-	return NodeInfo{
-		BlockHash:   blockHash,
-		AppHash:     appHash,
-		BlockHeight: blockHeight,
-		Time:        time.Now(),
-	}
-}
-
 type Node interface {
 	OnWebsocketDisconnect(remoteAddr string, logger tmlog.Logger)
 	AddToTxMempool(tx bfttypes.Tx)
@@ -64,7 +54,6 @@ type Node interface {
 	LastNodeInfo() NodeInfo
 	EarliestNodeInfo() NodeInfo
 
-	ValidatorInfo() ctypes.ValidatorInfo
 	EventBus() *bfttypes.EventBus
 	GetTxByHash([]byte) (*abcitypes.TxResult, error)
 	SearchTx(ctx context.Context, q *cmtquery.Query) ([]*abcitypes.TxResult, error)
@@ -79,21 +68,24 @@ func NewCometRpcServer(
 	client abciclient.Client,
 	chainId string,
 	logger server.Logger,
-) (*CometServer, *RPCServer) {
-	c := &CometServer{node: node, client: client, address: address, chainId: chainId, logger: logger}
-	return c, NewRPCServer(address, createRoute(c), node, "peptide-cometbft-rpc-server", logger)
+) *CometServer {
+	return &CometServer{
+		node:    node,
+		client:  client,
+		address: address,
+		chainId: chainId,
+		logger:  logger,
+	}
 }
 
-func createRoute(c *CometServer) Route {
+func Methods(c *CometServer) Route {
 	return Route{
-		//
 		// CometBFT rpc API
 		// https://docs.cometbft.com/main/rpc/
-		//
 
 		// server status
-		"echo":   cometRpc.NewRPCFunc(Echo, "msg"),
-		"health": cometRpc.NewRPCFunc(Health, ""),
+		"echo":   cometRpc.NewRPCFunc(c.Echo, "msg"),
+		"health": cometRpc.NewRPCFunc(c.Health, ""),
 		"status": cometRpc.NewRPCFunc(c.Status, ""),
 
 		// abci API
@@ -120,11 +112,11 @@ func createRoute(c *CometServer) Route {
 	}
 }
 
-func Echo(_ *rpctypes.Context, msg string) (string, error) {
+func (c *CometServer) Echo(_ *rpctypes.Context, msg string) (string, error) {
 	return msg, nil
 }
 
-func Health(*rpctypes.Context) (*ctypes.ResultHealth, error) {
+func (c *CometServer) Health(*rpctypes.Context) (*ctypes.ResultHealth, error) {
 	return &ctypes.ResultHealth{}, nil
 }
 
@@ -194,7 +186,7 @@ func (c *CometServer) Status(_ *rpctypes.Context) (*ctypes.ResultStatus, error) 
 
 			CatchingUp: false,
 		},
-		ValidatorInfo: c.node.ValidatorInfo(),
+		ValidatorInfo: ctypes.ValidatorInfo{}, // TODO
 	}
 	return status, nil
 }

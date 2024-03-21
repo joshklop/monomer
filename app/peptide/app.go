@@ -4,10 +4,14 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 )
 
+type QueryableApp interface {
+	Query(req abci.RequestQuery) (res abci.ResponseQuery)
+}
+
 type Application interface {
 	// Info/Query Connection
 	Info(abci.RequestInfo) abci.ResponseInfo    // Return application info
-	Query(abci.RequestQuery) abci.ResponseQuery // Query for state
+	QueryableApp
 
 	// Mempool Connection
 	CheckTx(abci.RequestCheckTx) abci.ResponseCheckTx // Validate a tx for the mempool
