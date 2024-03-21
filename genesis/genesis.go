@@ -16,6 +16,8 @@ type Genesis struct {
 	AppState []byte          `json:"app_state"`
 }
 
+const defaultGasLimit = 30_000_000
+
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {
 	const initialHeight = 1
 	app.InitChain(abci.RequestInitChain{
@@ -34,7 +36,7 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 			ChainID:  g.ChainID,
 			Time:     g.Time,
 			AppHash:  response.GetData(),
-			GasLimit: peptide.DefaultGasLimit,
+			GasLimit: defaultGasLimit,
 		},
 	}
 	blockStore.AddBlock(block)

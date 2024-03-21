@@ -9,7 +9,6 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
-	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/testutil/testapp"
@@ -69,7 +68,7 @@ func TestCommit(t *testing.T) {
 					Height:   info.GetLastBlockHeight(),
 					Time:     g.Time,
 					AppHash:  info.GetLastBlockAppHash(),
-					GasLimit: peptide.DefaultGasLimit,
+					GasLimit: 30_000_000, // We cheat a little and copy the default gas limit here.
 				},
 			}
 			block.Hash()

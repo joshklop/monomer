@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"log"
 	"math/big"
@@ -10,8 +9,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/ethereum-optimism/optimism/op-node/rollup"
 
 	"github.com/armon/go-metrics"
 	tmdb "github.com/cometbft/cometbft-db"
@@ -22,12 +19,13 @@ import (
 	"github.com/cometbft/cometbft/libs/service"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	bfttypes "github.com/cometbft/cometbft/types"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
+	rolluptypes "github.com/joshklop/x-rollup/types"
 	"github.com/polymerdao/monomer/app/node/server"
 	cometbft_rpc "github.com/polymerdao/monomer/app/node/server/cometbft_rpc"
 	"github.com/polymerdao/monomer/app/node/server/engine"
@@ -66,8 +64,9 @@ func NewPeptideNode(
 	mempooldb tmdb.DB,
 	appEndpoint *server.Endpoint,
 	eeEndpoint *server.Endpoint,
-	chainApp *peptide.PeptideApp,
+	chainApp peptide.Application,
 	clientCreator AbciClientCreator,
+	chainID eetypes.ChainID,
 	logger server.Logger,
 ) *PeptideNode {
 	bs := store.NewBlockStore(bsdb)
@@ -78,12 +77,12 @@ func NewPeptideNode(
 		node,
 		appEndpoint.FullAddress(),
 		node.client,
-		chainApp.ChainId.String(),
+		chainID.String(),
 		logger,
 	)
 
 	config := rpcee.DefaultConfig(eeEndpoint.Host)
-	eeServer := rpcee.NewEeRpcServer(config, node.getExecutionEngineAPIs(logger), logger)
+	eeServer := rpcee.NewEeRpcServer(config, node.getExecutionEngineAPIs(chainID, logger), logger)
 
 	node.cometServer = cometServer
 	node.cometRpcServer = cometRpcServer
@@ -102,23 +101,25 @@ func (p *PeptideNode) EarliestNodeInfo() cometbft_rpc.NodeInfo {
 	}
 }
 
+func (p *PeptideNode) ReportMetrics() {}
+
 func (p *PeptideNode) LastNodeInfo() cometbft_rpc.NodeInfo {
 	return p.EarliestNodeInfo()
 }
 
 // The public rpc methods are prefixed by the namespace (lower case) followed by all exported
 // methods of the "service" in camelcase
-func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API {
+func (p *PeptideNode) getExecutionEngineAPIs(chainID eetypes.ChainID, logger server.Logger) []ethrpc.API {
 	return []ethrpc.API{
 		{
 			Namespace: "engine",
 			Service: engine.NewEngineAPI(
-				builder.New(p.txMempool, p.chainApp.App, p.bs, p.txstore, p.eventBus, p.chainApp.ChainId),
+				builder.New(p.txMempool, p.app, p.bs, p.txstore, p.eventBus, chainID),
 				p.bs,
 			),
 		}, {
 			Namespace: "eth",
-			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(new(big.Int).SetUint64(uint64(p.chainApp.ChainId)))),
+			Service:   engine.NewEthAPI(p.bs, p, (*hexutil.Big)(new(big.Int).SetUint64(uint64(chainID)))),
 		}, {
 			Namespace: "pep",
 			Service:   engine.NewPeptideAPI(p.bs, logger.With("module", "peptide")),
@@ -126,60 +127,11 @@ func (p *PeptideNode) getExecutionEngineAPIs(logger server.Logger) []ethrpc.API 
 	}
 }
 
-func NewPeptideNodeFromConfig(
-	app *peptide.PeptideApp,
-	bsdb tmdb.DB,
-	txstoreDb tmdb.DB,
-	mempooldb tmdb.DB,
-	config *server.Config,
-) (*PeptideNode, error) {
-	// TODO: enable abci servers too if configured
-	return NewPeptideNode(
-		bsdb,
-		txstoreDb,
-		mempooldb,
-		&config.PeptideCometServerRpc,
-		&config.PeptideEngineServerRpc,
-		app,
-		NewLocalClient,
-		config.Logger,
-	), nil
-}
-
-func InitChain(app peptide.Application, blockStore store.BlockStore, genesis *PeptideGenesis) (*eetypes.Block, error) {
-	l1TxBytes, err := derive.L1InfoDepositBytes(
-		&rollup.Config{},
-		// TODO fill this out?
-		eth.SystemConfig{},
-		0,
-		// TODO add l1 parent hash from genesis
-		eetypes.NewBlockInfo(genesis.L1.Hash, sha256.Sum256([]byte{}), genesis.L1.Number, uint64(genesis.GenesisTime.Unix())),
-		0,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to derive L1 info deposit tx bytes for genesis block: %v", err)
-	}
-
-	block := &eetypes.Block{
-		Txs: []bfttypes.Tx{l1TxBytes},
-		// TODO
-		// Header: peptide.Init(app, genesis.ChainID, genesis.AppState, genesis.InitialL2Height, genesis.GenesisTime),
-	}
-	hash := block.Hash() // Also sets the block hash.
-	blockStore.AddBlock(block)
-	for _, label := range []eth.BlockLabel{eth.Unsafe, eth.Finalized, eth.Safe} {
-		if err := blockStore.UpdateLabel(label, hash); err != nil {
-			panic(err)
-		}
-	}
-	return block, nil
-}
-
 // PeptideNode implements all RPC methods defined in RouteMap.
 type PeptideNode struct {
 	client        abciclient.Client
 	clientCreator AbciClientCreator
-	chainApp      *peptide.PeptideApp
+	app           peptide.Application
 	lock          sync.RWMutex
 
 	eventBus *bfttypes.EventBus
@@ -222,12 +174,12 @@ func (cs *PeptideNode) EngineServerAddress() net.Addr {
 // TODO: do not expose PeptideNode as a service to avoid misuse
 var _ service.Service = (*PeptideNode)(nil)
 
-func newNode(chainApp *peptide.PeptideApp, clientCreator AbciClientCreator, bs store.BlockStore,
+func newNode(chainApp peptide.Application, clientCreator AbciClientCreator, bs store.BlockStore,
 	txstore txstore.TxStore, mempoolStorage tmdb.DB, logger tmlog.Logger,
 ) *PeptideNode {
 	cs := &PeptideNode{
 		clientCreator: clientCreator,
-		chainApp:      chainApp,
+		app:           chainApp,
 		logger:        logger,
 		bs:            bs,
 		txstore:       txstore,
@@ -250,7 +202,7 @@ func (cs *PeptideNode) resume() {
 	// in the odd case the app state comes up out of sync with the blockstore, we perform a mini-rollback
 	// to bring them back to the same place. This should never ever happen but when it does (and it did)
 	// it would cause the loop derivation to get stuck
-	info := cs.chainApp.App.Info(abcitypes.RequestInfo{})
+	info := cs.app.Info(abcitypes.RequestInfo{})
 	if lastBlock.Header.Height != info.LastBlockHeight {
 		cs.logger.Info("blockstore and appstate out of sync",
 			"last_block_height",
@@ -266,13 +218,9 @@ func (cs *PeptideNode) resume() {
 		}
 
 		// do the mini-rollback to the last height available on the block store
-		if err := cs.chainApp.RollbackToHeight(lastBlock.Header.Height); err != nil {
+		if err := cs.app.RollbackToHeight(uint64(lastBlock.Header.Height)); err != nil {
 			panic(err)
 		}
-	}
-
-	if err := cs.chainApp.Resume(lastBlock.Header.ToComet().ToProto()); err != nil {
-		panic(err)
 	}
 }
 
@@ -308,10 +256,6 @@ func (cs *PeptideNode) OnWebsocketDisconnect(remoteAddr string, logger tmlog.Log
 	}
 }
 
-func (cs *PeptideNode) ReportMetrics() {
-	cs.chainApp.ReportMetrics()
-}
-
 // AddToTxMempool adds txs to the mempool.
 func (cs *PeptideNode) AddToTxMempool(tx bfttypes.Tx) {
 	cs.lock.Lock()
@@ -325,11 +269,7 @@ func (cs *PeptideNode) AddToTxMempool(tx bfttypes.Tx) {
 type ValidatorInfo = ctypes.ValidatorInfo
 
 func (cs *PeptideNode) ValidatorInfo() ValidatorInfo {
-	return ctypes.ValidatorInfo{
-		Address:     cs.chainApp.ValSet.Validators[0].Address,
-		PubKey:      cs.chainApp.ValSet.Validators[0].PubKey,
-		VotingPower: cs.chainApp.ValSet.Validators[0].VotingPower,
-	}
+	return ctypes.ValidatorInfo{}
 }
 
 func (cs *PeptideNode) EventBus() *bfttypes.EventBus {
@@ -411,33 +351,6 @@ func (cs *PeptideNode) GetBlock(id any) (*eetypes.Block, error) {
 	return block, nil
 }
 
-// deliverTxs delivers all txs to the chainApp.
-//   - This cause pending chainApp state changes, but does not commit the changes.
-//   - App-level tx error will not be bubbled up, but will be included in the tx response for tx events listners and tx quries.
-func (cs *PeptideNode) deliverTxs(txs bfttypes.Txs) []*abcitypes.TxResult {
-	height := cs.chainApp.CurrentHeader().Height
-	var txResults []*abcitypes.TxResult
-	for i, tx := range txs {
-		var resp *abcitypes.ResponseDeliverTx
-		for {
-			var err error
-			resp, err = cs.client.DeliverTxSync(abcitypes.RequestDeliverTx{Tx: tx})
-			if err == nil {
-				break
-			}
-			cs.logger.Error(fmt.Sprintf("failed to DeliverTxSync tx-%d in block %d due to: %v", i, height, err))
-		}
-		txResult := &abcitypes.TxResult{
-			Height: height,
-			Tx:     tx,
-			Result: *resp,
-		}
-		txResults = append(txResults, txResult)
-	}
-	cs.logger.Info("delivered L2 txs to chainApp", "height", height, "numberOfTxs", len(txs))
-	return txResults
-}
-
 // TODO: add more details to response
 type ImportExportResponse struct {
 	success bool
@@ -450,7 +363,7 @@ func (cs *PeptideNode) resetClient() {
 	if cs.client != nil && cs.client.IsRunning() {
 		cs.client.Stop()
 	}
-	cs.client = cs.clientCreator(cs.chainApp.App)
+	cs.client = cs.clientCreator(cs.app)
 
 	// TODO: allow to enable/disable tx indexer; and add logger when cometbft version is upgraded
 }
@@ -460,9 +373,12 @@ func (cs *PeptideNode) Balance(evmAddr common.Address, height int64) (*big.Int, 
 	cs.lock.RLock()
 	defer cs.lock.RUnlock()
 	cosmAddr := peptidecommon.EvmToCosmos(evmAddr)
-	balance, err := cs.chainApp.GetETH(cosmAddr, height)
-	if err != nil {
-		return nil, err
-	}
-	return balance.BigInt(), nil
+
+	resp := peptide.MustGetResponseWithHeight(new(banktypes.QueryBalanceResponse), cs.app, &banktypes.QueryBalanceRequest{
+		Address: cosmAddr.String(),
+		Denom:   rolluptypes.ETH,
+	}, "/cosmos.bank.v1beta1.Query/Balance", height)
+	balance := resp.Balance.Amount.BigInt()
+
+	return balance, nil
 }

@@ -7,15 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	abciclient "github.com/cometbft/cometbft/abci/client"
 	abcitypes "github.com/cometbft/cometbft/abci/types"
-	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/polymerdao/monomer/app/node"
+	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/app/node/server"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
-	"github.com/polymerdao/monomer/app/peptide"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/testutil/testapp"
 )
@@ -76,18 +74,10 @@ func run(ctx context.Context, cfg *config) error {
 	}
 	defer mempooldb.Close() // TODO check error
 
-	if _, err = node.InitChain(app, store.NewBlockStore(blockdb), &node.PeptideGenesis{
-		GenesisTime: time.Now(),
-		ChainID:     chainID.String(),
-		AppState: []byte(`{
-				"key": "value"
-			}`),
-		L1: eth.BlockID{
-			Number: 1,
-		},
-		InitialL2Height: 1,
-	}); err != nil {
-		return fmt.Errorf("init chain: %v", err)
+
+	g := &genesis.Genesis{}
+	if err := g.Commit(app, store.NewBlockStore(blockdb)); err != nil {
+		return fmt.Errorf("commit genesis: %v", err)
 	}
 
 	peptideNode := node.NewPeptideNode(
@@ -102,10 +92,11 @@ func run(ctx context.Context, cfg *config) error {
 			Host:     fmt.Sprintf("localhost:%d", cfg.EnginePort),
 			Protocol: "tcp",
 		},
-		peptide.New(chainID, app),
+		app,
 		func(app abcitypes.Application) abciclient.Client {
 			return nil // TODO
 		},
+		chainID,
 		logger,
 	)
 
