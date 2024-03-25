@@ -7,7 +7,7 @@ import (
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	ethengine "github.com/ethereum/go-ethereum/beacon/engine"
-	"github.com/polymerdao/monomer/app/node/server/engine"
+	"github.com/polymerdao/monomer/engine"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/app/peptide/txstore"

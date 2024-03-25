@@ -18,6 +18,10 @@ func (id ChainID) String() string {
 	return strconv.FormatUint(uint64(id), 10)
 }
 
+func (id ChainID) HexBig() *hexutil.Big {
+	return (*hexutil.Big)(new(big.Int).SetUint64(uint64(id)))
+}
+
 type Header struct {
 	ChainID    ChainID     `json:"chain_id"`
 	Height     int64       `json:"height"`

@@ -18,6 +18,7 @@ type Genesis struct {
 
 const defaultGasLimit = 30_000_000
 
+// Commit assumes the application has not been initialized and that the block store is empty.
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {
 	const initialHeight = 1
 	app.InitChain(abci.RequestInitChain{
