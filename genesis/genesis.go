@@ -11,7 +11,7 @@ import (
 )
 
 type Genesis struct {
-	Time     uint64          `json:"genesis_time"`
+	Time     uint64          `json:"time"`
 	ChainID  eetypes.ChainID `json:"chain_id"`
 	AppState []byte          `json:"app_state"`
 }

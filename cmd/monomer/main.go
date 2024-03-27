@@ -28,6 +28,8 @@ import (
 
 type Config struct {
 	DataDir    string           `json:"data_dir"`
+	EthHost    string           `json:"eth_host"`
+	EthPort    uint16           `json:"eth_port"`
 	EngineHost string           `json:"engine_host"`
 	EnginePort uint16           `json:"engine_port"`
 	Genesis    *genesis.Genesis `json:"genesis"`
@@ -54,6 +56,10 @@ func parseFlags() (*Config, error) {
 	flag.StringVar(&engineHost, "engine-host", "127.0.0.1", "")
 	var enginePort uint64
 	flag.Uint64Var(&enginePort, "engine-port", 8888, "")
+	var ethHost string
+	flag.StringVar(&ethHost, "eth-host", "127.0.0.1", "")
+	var ethPort uint64
+	flag.Uint64Var(&ethPort, "eth-port", 8888, "")
 	var genesisFile string
 	flag.StringVar(&genesisFile, "genesis-file", "", "")
 
@@ -61,6 +67,8 @@ func parseFlags() (*Config, error) {
 
 	if enginePort > math.MaxUint16 {
 		return nil, fmt.Errorf("engine port is out of range: %d", enginePort)
+	} else if ethPort > math.MaxUint16 {
+		return nil, fmt.Errorf("eth port is out of range: %d", ethPort)
 	}
 
 	g := new(genesis.Genesis)
@@ -69,7 +77,6 @@ func parseFlags() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read genesis file: %v", err)
 		}
-
 		if err = json.Unmarshal(genesisBytes, &g); err != nil {
 			return nil, fmt.Errorf("unmarshal genesis file: %v", err)
 		}
@@ -77,6 +84,8 @@ func parseFlags() (*Config, error) {
 
 	return &Config{
 		DataDir:    dataDir,
+		EthHost:    ethHost,
+		EthPort:    uint16(ethPort),
 		EngineHost: engineHost,
 		EnginePort: uint16(enginePort),
 		Genesis:    g,
@@ -134,16 +143,23 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("listen on engine address: %v", err)
 	}
 
-	n := newNodeService(rpcee.NewEeRpcServer(config.EngineHost, config.EnginePort, []ethrpc.API{
-		{
-			Namespace: "eth",
-			Service:   engine.NewEthAPI(blockStore, app, config.Genesis.ChainID.HexBig()),
-		},
-		{
-			Namespace: "engine",
-			Service:   engine.NewEngineAPI(builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID), blockStore),
-		},
-	}, logger), eventBus)
+	n := newNodeService(
+		rpcee.NewEeRpcServer(config.EthHost, config.EthPort, []ethrpc.API{
+			{
+				Namespace: "eth",
+				Service:   engine.NewEthAPI(blockStore, app, config.Genesis.ChainID.HexBig()),
+			},
+		}, logger),
+		rpcee.NewEeRpcServer(config.EngineHost, config.EnginePort, []ethrpc.API{
+			{
+				Namespace: "engine",
+				Service:   engine.NewEngineAPI(builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID), blockStore),
+			},
+			{
+				Namespace: "eth",
+				Service:   engine.NewEthAPI(blockStore, app, config.Genesis.ChainID.HexBig()),
+			},
+		}, logger), eventBus)
 
 	if err := n.Start(); err != nil {
 		return fmt.Errorf("start node: %v", err)

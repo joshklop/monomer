@@ -16,15 +16,19 @@ type namedService struct {
 
 type nodeService []namedService
 
-func newNodeService(engineServer, eventBus Service) nodeService {
+func newNodeService(engineServer, ethServer, eventBus Service) nodeService {
 	return []namedService{
-		{
-			name:    "engine server",
-			service: engineServer,
-		},
 		{
 			name:    "event bus",
 			service: eventBus,
+		},
+		{
+			name:    "eth server",
+			service: ethServer,
+		},
+		{
+			name:    "engine server",
+			service: engineServer,
 		},
 	}
 }
@@ -39,7 +43,8 @@ func (n nodeService) Start() error {
 }
 
 func (n nodeService) Stop() error {
-	for _, namedService := range n {
+	for i := 0; i < len(n); i++ {
+		namedService := n[len(n)-1-i] // Stop services in reverse order.
 		if err := namedService.service.Stop(); err != nil {
 			return fmt.Errorf("stop %s: %v", namedService.name, err)
 		}

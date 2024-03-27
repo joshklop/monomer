@@ -80,7 +80,7 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 		"parentHash": b.Header.ParentHash,
 		"stateRoot":  common.BytesToHash(b.Header.AppHash),
 		"number":     (*hexutil.Big)(big.NewInt(b.Header.Height)),
-		"gasLimit":   b.Header.GasLimit,
+		"gasLimit":   hexutil.Uint64(b.Header.GasLimit),
 		"mixHash":    common.Hash{},
 		"timestamp":  hexutil.Uint64(b.Header.Time),
 		"hash":       b.Hash(),

@@ -79,7 +79,3 @@ func TestCommit(t *testing.T) {
 		})
 	}
 }
-
-// TODO test Commit with mismatched chain IDs.
-// set up the app with chain id of 0.
-// then use different one for init chain.

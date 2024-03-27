@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -39,8 +40,8 @@ func (e *EthAPI) ChainId() *hexutil.Big {
 	return e.chainID
 }
 
-func (e *EthAPI) GetBalance(address common.Address, id any) (*hexutil.Big, error) {
-	b := e.blockByID(id)
+func (e *EthAPI) GetBalance(address common.Address, id EthBlockID) (*hexutil.Big, error) {
+	b := id.Get(e.blockStore)
 	if b == nil {
 		return nil, errors.New("block not found")
 	}
@@ -77,32 +78,46 @@ func (e *EthAPI) GetBalance(address common.Address, id any) (*hexutil.Big, error
 func (e *EthAPI) GetBlockByHash(hash common.Hash, inclTx bool) (map[string]any, error) {
 	b := e.blockStore.BlockByHash(hash)
 	if b == nil {
-		return nil, errors.New("block not found")
+		return nil, errors.New("not found")
 	}
 	return b.ToEthLikeBlock(inclTx), nil
 }
 
-func (e *EthAPI) GetBlockByNumber(id any, inclTx bool) (map[string]any, error) {
-	b := e.blockByID(id)
-	if b == nil {
-		return nil, errors.New("block not found") // TODO: do we need a special error?
-	}
-	return b.ToEthLikeBlock(inclTx), nil
+type EthBlockID struct {
+	label  eth.BlockLabel
+	height int64
 }
 
-func (e *EthAPI) blockByID(id any) *eetypes.Block {
-	switch idT := id.(type) {
-	case nil:
-		return e.blockStore.BlockByLabel(eth.Unsafe)
-	case int:
-		return e.blockStore.BlockByNumber(int64(idT))
-	case int64:
-		return e.blockStore.BlockByNumber(idT)
-	case eth.BlockLabel:
-		return e.blockStore.BlockByLabel(idT)
-	case string:
-		return e.blockStore.BlockByLabel(eth.BlockLabel(idT))
+func (id *EthBlockID) UnmarshalJSON(data []byte) error {
+	var dataStr string
+	if err := json.Unmarshal(data, &dataStr); err != nil {
+		return fmt.Errorf("unmarshal block id into string: %v", err)
+	}
+
+	switch dataStr {
+	case eth.Unsafe, eth.Safe, eth.Finalized:
+		id.label = eth.BlockLabel(dataStr)
 	default:
-		return nil
+		height := new(hexutil.Uint64)
+		if err := height.UnmarshalText([]byte(dataStr)); err != nil {
+			return fmt.Errorf("unmarshal height as hexutil.Uint64: %v", err)
+		}
+		id.height = int64(*height)
 	}
+	return nil
+}
+
+func (id *EthBlockID) Get(s store.BlockStoreReader) *eetypes.Block {
+	if id.label != "" {
+		return s.BlockByLabel(id.label)
+	}
+	return s.BlockByNumber(id.height)
+}
+
+func (e *EthAPI) GetBlockByNumber(id EthBlockID, inclTx bool) (map[string]any, error) {
+	b := id.Get(e.blockStore)
+	if b == nil {
+		return nil, errors.New("not found")
+	}
+	return b.ToEthLikeBlock(inclTx), nil
 }
