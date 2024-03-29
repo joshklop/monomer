@@ -252,3 +252,122 @@ func TestRollback(t *testing.T) {
 	}
 	// We trust that the other parts of a tx store rollback were done as well.
 }
+
+func TestBuildNoTxPool(t *testing.T) {
+	inclusionListState := map[string]string{
+		"k1": "v1",
+		"k2": "v2",
+	}
+	inclusionListTxs := bfttypes.ToTxs(testapp.ToTxs(t, inclusionListState))
+	mempoolState := map[string]string{
+		"k3": "v3",
+		"k4": "v4",
+	}
+
+	mempooldb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, mempooldb.Close())
+	})
+	pool := mempool.New(mempooldb)
+	for _, tx := range testapp.ToTxs(t, mempoolState) {
+		require.NoError(t, pool.Enqueue(tx))
+	}
+
+	blockdb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, blockdb.Close())
+	})
+	blockStore := store.NewBlockStore(blockdb)
+
+	txdb := tmdb.NewMemDB()
+	t.Cleanup(func() {
+		require.NoError(t, txdb.Close())
+	})
+	txStore := txstore.NewTxStore(txdb)
+
+	g := &genesis.Genesis{}
+
+	app := testapp.NewTest(t, g.ChainID.String())
+
+	eventBus := bfttypes.NewEventBus()
+	require.NoError(t, eventBus.Start())
+	t.Cleanup(func() {
+		require.NoError(t, eventBus.Stop())
+	})
+
+	// +1 because we want it to be buffered even when the inclusion list is empty.
+	subChannelLen := len(inclusionListState) + 1
+	subscription, err := eventBus.Subscribe(context.Background(), "test", &queryAll{}, subChannelLen)
+	require.NoError(t, err)
+
+	require.NoError(t, g.Commit(app, blockStore))
+
+	b := builder.New(
+		pool,
+		app,
+		blockStore,
+		txStore,
+		eventBus,
+		g.ChainID,
+	)
+
+	payload := &builder.Payload{
+		Transactions: inclusionListTxs,
+		GasLimit:     0,
+		Timestamp:    g.Time + 1,
+		NoTxPool:     true,
+	}
+	preBuildInfo := app.Info(abcitypes.RequestInfo{})
+	require.NoError(t, b.Build(payload))
+	postBuildInfo := app.Info(abcitypes.RequestInfo{})
+
+	// Application.
+	{
+		height := uint64(postBuildInfo.GetLastBlockHeight())
+		app.StateContains(t, height, inclusionListState)
+		app.StateDoesNotContain(t, height, mempoolState)
+	}
+
+	// Block store.
+	genesisBlock := blockStore.BlockByNumber(preBuildInfo.GetLastBlockHeight())
+	require.NotNil(t, genesisBlock)
+	gotBlock := blockStore.HeadBlock()
+	wantBlock := &eetypes.Block{
+		Header: &eetypes.Header{
+			ChainID:    g.ChainID,
+			Height:     postBuildInfo.GetLastBlockHeight(),
+			Time:       payload.Timestamp,
+			ParentHash: genesisBlock.Hash(),
+			AppHash:    preBuildInfo.GetLastBlockAppHash(),
+			GasLimit:   payload.GasLimit,
+		},
+		Txs: inclusionListTxs,
+	}
+	wantBlock.Hash()
+	require.Equal(t, wantBlock, gotBlock)
+
+	// Tx store and event bus.
+	eventChan := subscription.Out()
+	require.Len(t, eventChan, len(wantBlock.Txs))
+	for i, tx := range wantBlock.Txs {
+		checkTxResult := func(got abcitypes.TxResult) {
+			// We don't check the full result, which would be difficult and a bit overkill.
+			// We only verify that the main info is correct.
+			require.Equal(t, uint32(i), got.Index)
+			require.Equal(t, wantBlock.Header.Height, got.Height)
+			require.Equal(t, tx, bfttypes.Tx(got.Tx))
+		}
+
+		// Tx store.
+		got, err := txStore.Get(tx.Hash())
+		require.NoError(t, err)
+		checkTxResult(*got)
+
+		// Event bus.
+		event := <-eventChan
+		data := event.Data()
+		require.IsType(t, bfttypes.EventDataTx{}, data)
+		checkTxResult(data.(bfttypes.EventDataTx).TxResult)
+	}
+	require.NoError(t, subscription.Err())
+}

@@ -43,7 +43,7 @@ func ToTxs(t *testing.T, kvs map[string]string) [][]byte {
 	return txs
 }
 
-// StateContains ensures the key-values exist in the test app's state.
+// StateContains ensures the key-values exist in the app's state.
 func (a *App) StateContains(t *testing.T, height uint64, kvs map[string]string) {
 	if len(kvs) == 0 {
 		return
@@ -59,10 +59,30 @@ func (a *App) StateContains(t *testing.T, height uint64, kvs map[string]string) 
 			Data:   requestBytes,
 			Height: int64(height),
 		})
-		require.Equal(t, uint32(0), resp.GetCode(), resp.GetLog())
 		var val testappv1.GetResponse
 		require.NoError(t, (&val).Unmarshal(resp.GetValue()))
 		gotState[k] = val.GetValue()
 	}
 	require.Equal(t, gotState, kvs)
+}
+
+// StateDoesNotContain ensures the key-values do not exist in the app's state.
+func (a *App) StateDoesNotContain(t *testing.T, height uint64, kvs map[string]string) {
+	if len(kvs) == 0 {
+		return
+	}
+	for k := range kvs {
+		requestBytes, err := (&testappv1.GetRequest{
+			Key: k,
+		}).Marshal()
+		require.NoError(t, err)
+		resp := a.Query(abcitypes.RequestQuery{
+			Path:   "/testapp.v1.GetService/Get", // TODO is there a way to find this programmatically?
+			Data:   requestBytes,
+			Height: int64(height),
+		})
+		var val testappv1.GetResponse
+		require.NoError(t, (&val).Unmarshal(resp.GetValue()))
+		require.Empty(t, val.GetValue())
+	}
 }

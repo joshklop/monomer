@@ -84,29 +84,31 @@ type Payload struct {
 	// Transactions functions as an inclusion list.
 	Transactions bfttypes.Txs
 	// TODO: make the gas limit actually be enforced. Need to translate between cosmos and op gas limit.
-	GasLimit     uint64 
-	Timestamp    uint64
+	GasLimit  uint64
+	Timestamp uint64
+	NoTxPool  bool
 }
 
 func (b *Builder) Build(payload *Payload) error {
-	// Shallow clone is ok, we just don't want to modify payload.Transactions.
-	txs := slices.Clone(payload.Transactions)
-	for {
-		// TODO there is risk of losing txs if mempool db fails.
-		// we need to fix db consistency in general, so we're just panicing on errors for now.
-		length, err := b.mempool.Len()
-		if err != nil {
-			panic(fmt.Errorf("enqueue: %v", err))
-		}
-		if length == 0 {
-			break
-		}
+	txs := slices.Clone(payload.Transactions) // Shallow clone is ok, we just don't want to modify the slice itself.
+	if !payload.NoTxPool {
+		for {
+			// TODO there is risk of losing txs if mempool db fails.
+			// we need to fix db consistency in general, so we're just panicing on errors for now.
+			length, err := b.mempool.Len()
+			if err != nil {
+				panic(fmt.Errorf("enqueue: %v", err))
+			}
+			if length == 0 {
+				break
+			}
 
-		tx, err := b.mempool.Dequeue()
-		if err != nil {
-			panic(fmt.Errorf("dequeue: %v", err))
+			tx, err := b.mempool.Dequeue()
+			if err != nil {
+				panic(fmt.Errorf("dequeue: %v", err))
+			}
+			txs = append(txs, tx)
 		}
-		txs = append(txs, tx)
 	}
 
 	// Build header.
