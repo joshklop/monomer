@@ -120,12 +120,9 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 
 		// Docs on OP PayloadAttributes struct:
 		//   Withdrawals... should be nil or empty depending on Shanghai enablement
-		// We assume Shanghai is enabled on L1.
-		if pa.Withdrawals == nil {
-			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("withdrawals: want empty, got null"))
-		} else if len(*pa.Withdrawals) > 0 {
-			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("withdrawals: want empty, got non-empty"))
-		}
+		//   Starting at Ecotone, the parentBeaconBlockRoot must be set to the L1 origin parentBeaconBlockRoot, or a zero bytes32 if the Dencun functionality with parentBeaconBlockRoot is not active on L1.
+		// We don't make any judgements about what hard fork is on L1.
+		// We can change this later if it becomes an issue, but right now it just prevents us from using Geth in PoW clique mode for devnets.
 
 		// OP Spec:
 		//   The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup.
@@ -139,13 +136,6 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 		// OP-Geth returns InvalidParams.
 		if pa.GasLimit == nil {
 			return nil, engine.InvalidPayloadAttributes.With(errors.New("gas limit not provided"))
-		}
-
-		// OP Spec:
-		//   Starting at Ecotone, the parentBeaconBlockRoot must be set to the L1 origin parentBeaconBlockRoot, or a zero bytes32 if the Dencun functionality with parentBeaconBlockRoot is not active on L1.
-		// We assume Dencun is enabled on L1.
-		if pa.ParentBeaconBlockRoot == nil {
-			return nil, engine.InvalidPayloadAttributes.With(errors.New("parent beacon block root not provided"))
 		}
 
 		// OP Spec:
@@ -215,7 +205,7 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 		}(),
 		// We know it is non-nil from payload validation.
 		// TODO make payloadstore store `builder.Payload`s.
-		GasLimit: uint64(*payload.Attrs.GasLimit),
+		GasLimit:  uint64(*payload.Attrs.GasLimit),
 		Timestamp: uint64(payload.Attrs.Timestamp),
 		// TODO don't ignore the NoTxPool option.
 	}); err != nil {

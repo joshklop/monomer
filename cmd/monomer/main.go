@@ -21,6 +21,7 @@ import (
 	"github.com/polymerdao/monomer/app/peptide/txstore"
 	"github.com/polymerdao/monomer/builder"
 	"github.com/polymerdao/monomer/engine"
+	"github.com/polymerdao/monomer/eth"
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/mempool"
 	"github.com/polymerdao/monomer/testutil/testapp"
@@ -139,15 +140,19 @@ func run(ctx context.Context) error {
 	mpool := mempool.New(mempooldb)
 
 	eventBus := bfttypes.NewEventBus()
-	if err != nil {
-		return fmt.Errorf("listen on engine address: %v", err)
-	}
 
+	ethAPI := struct {
+		*eth.ChainID
+		*eth.BlockByNumber
+	}{
+		ChainID:       eth.NewChainID(config.Genesis.ChainID.HexBig()),
+		BlockByNumber: eth.NewBlockByNumber(blockStore),
+	}
 	n := newNodeService(
 		rpcee.NewEeRpcServer(config.EthHost, config.EthPort, []ethrpc.API{
 			{
 				Namespace: "eth",
-				Service:   engine.NewEthAPI(blockStore, app, config.Genesis.ChainID.HexBig()),
+				Service:   ethAPI,
 			},
 		}, logger),
 		rpcee.NewEeRpcServer(config.EngineHost, config.EnginePort, []ethrpc.API{
@@ -157,7 +162,7 @@ func run(ctx context.Context) error {
 			},
 			{
 				Namespace: "eth",
-				Service:   engine.NewEthAPI(blockStore, app, config.Genesis.ChainID.HexBig()),
+				Service:   ethAPI,
 			},
 		}, logger), eventBus)
 
