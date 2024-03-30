@@ -1,23 +1,23 @@
 package payloadstore
 
 import (
-	"fmt"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/beacon/engine"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 )
 
 type PayloadStore interface {
-	Add(payload *eetypes.Payload) error
-	Get(id eetypes.PayloadID) (*eetypes.Payload, bool)
+	Add(payload *eetypes.Payload)
+	Get(id engine.PayloadID) (*eetypes.Payload, bool)
 	Current() *eetypes.Payload
 	RollbackToHeight(height int64) error
 }
 
 type pstore struct {
 	mutex    sync.Mutex
-	payloads map[eetypes.PayloadID]*eetypes.Payload
-	heights  map[int64]eetypes.PayloadID
+	payloads map[engine.PayloadID]*eetypes.Payload
+	heights  map[int64]engine.PayloadID
 	current  *eetypes.Payload
 }
 
@@ -26,19 +26,13 @@ var _ PayloadStore = (*pstore)(nil)
 func NewPayloadStore() PayloadStore {
 	return &pstore{
 		mutex:    sync.Mutex{},
-		payloads: make(map[eetypes.PayloadID]*eetypes.Payload),
-		heights:  make(map[int64]eetypes.PayloadID),
+		payloads: make(map[engine.PayloadID]*eetypes.Payload),
+		heights:  make(map[int64]engine.PayloadID),
 	}
 }
 
-func (p *pstore) Add(payload *eetypes.Payload) error {
-	if payload == nil {
-		return fmt.Errorf("could not add invalid payload")
-	}
-	id, err := payload.GetPayloadID()
-	if err != nil {
-		return fmt.Errorf("could not add payload, %w", err)
-	}
+func (p *pstore) Add(payload *eetypes.Payload) {
+	id := payload.ID()
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	if _, ok := p.payloads[*id]; !ok {
@@ -46,10 +40,9 @@ func (p *pstore) Add(payload *eetypes.Payload) error {
 		p.payloads[*id] = payload
 		p.current = payload
 	}
-	return nil
 }
 
-func (p *pstore) Get(id eetypes.PayloadID) (*eetypes.Payload, bool) {
+func (p *pstore) Get(id engine.PayloadID) (*eetypes.Payload, bool) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	if payload, ok := p.payloads[id]; ok {
@@ -70,8 +63,8 @@ func (p *pstore) RollbackToHeight(height int64) error {
 
 	// nuke everything in memory
 	p.current = nil
-	p.heights = make(map[int64]eetypes.PayloadID)
-	p.payloads = make(map[eetypes.PayloadID]*eetypes.Payload)
+	p.heights = make(map[int64]engine.PayloadID)
+	p.payloads = make(map[engine.PayloadID]*eetypes.Payload)
 
 	return nil
 }

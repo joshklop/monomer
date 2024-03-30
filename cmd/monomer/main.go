@@ -158,7 +158,7 @@ func run(ctx context.Context) error {
 		rpcee.NewEeRpcServer(config.EngineHost, config.EnginePort, []ethrpc.API{
 			{
 				Namespace: "engine",
-				Service:   engine.NewEngineAPI(builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID), blockStore),
+				Service:   engine.NewEngineAPI(builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID), app, blockStore),
 			},
 			{
 				Namespace: "eth",

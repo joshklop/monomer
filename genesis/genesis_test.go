@@ -2,7 +2,6 @@ package genesis_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	tmdb "github.com/cometbft/cometbft-db"
@@ -17,27 +16,30 @@ import (
 )
 
 func TestCommit(t *testing.T) {
-	tests := map[string]*genesis.Genesis{
-		"empty bytes state": {
-			AppState: []byte{},
-		},
-		"empty json state": {
-			AppState: []byte(`{}`),
-		},
-		"nonempty state": {
-			AppState: []byte(fmt.Sprintf(`{"%s": { "test": "test" } }`, testmodule.Name)),
+	tests := map[string]struct {
+		kvs     []string
+		genesis *genesis.Genesis
+	}{
+		"nonempty testmodule state": {
+			kvs:     []string{"k1", "v1"},
+			genesis: &genesis.Genesis{},
 		},
 		"non-zero chain ID": {
-			ChainID: 1,
+			genesis: &genesis.Genesis{
+				ChainID: 1,
+			},
 		},
 		"non-zero genesis time": {
-			Time: 1,
+			genesis: &genesis.Genesis{
+				Time: 1,
+			},
 		},
 	}
 
-	for description, g := range tests {
+	for description, test := range tests {
 		t.Run(description, func(t *testing.T) {
-			app := testapp.NewTest(t, g.ChainID.String())
+			app := testapp.NewTest(t, test.genesis.ChainID.String())
+			test.genesis.AppState = testapp.MakeGenesisAppState(t, app, test.kvs...)
 
 			blockstoredb := tmdb.NewMemDB()
 			t.Cleanup(func() {
@@ -45,28 +47,28 @@ func TestCommit(t *testing.T) {
 			})
 			blockStore := store.NewBlockStore(blockstoredb)
 
-			require.NoError(t, g.Commit(app, blockStore))
+			require.NoError(t, test.genesis.Commit(app, blockStore))
+
+			info := app.Info(abci.RequestInfo{})
 
 			// Application.
-			info := app.Info(abci.RequestInfo{})
 			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
-			state := make(map[string]map[string]string)           // It is ok to assume the format of the genesis state because it is defined by the test input.
-			if len(g.AppState) > 0 {
-				require.NoError(t, json.Unmarshal(g.AppState, &state))
-			}
-			gotState := make(map[string]map[string]string)
-			for moduleName, moduleState := range state {
-				gotState[moduleName] = make(map[string]string)
-				app.StateContains(t, uint64(info.GetLastBlockHeight()), moduleState)
+			{
+				// Ensure testmodule state was set correctly.
+				state := make(map[string]json.RawMessage) // It is ok to assume the format of the genesis state because it is defined by the test input.
+				require.NoError(t, json.Unmarshal(test.genesis.AppState, &state))
+				kvs := make(map[string]string)
+				require.NoError(t, json.Unmarshal(state[testmodule.ModuleName], &kvs))
+				app.StateContains(t, uint64(info.GetLastBlockHeight()), kvs)
 			}
 			// Even though RequestInitChain contains the chain ID, we can't test that it was set properly since the ABCI doesn't expose it.
 
 			// Block store.
 			block := &eetypes.Block{
 				Header: &eetypes.Header{
-					ChainID:  g.ChainID,
+					ChainID:  test.genesis.ChainID,
 					Height:   info.GetLastBlockHeight(),
-					Time:     g.Time,
+					Time:     test.genesis.Time,
 					AppHash:  info.GetLastBlockAppHash(),
 					GasLimit: 30_000_000, // We cheat a little and copy the default gas limit here.
 				},

@@ -4,16 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sync"
 
+	abci "github.com/cometbft/cometbft/abci/types"
 	bfttypes "github.com/cometbft/cometbft/types"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/builder"
+	rolluptypes "github.com/polymerdao/polymerase/chain/x/rollup/types"
 )
 
 type BlockStore interface {
@@ -25,13 +30,19 @@ type BlockStore interface {
 // EngineAPI implements the Engine API. It assumes it is the sole block proposer.
 type EngineAPI struct {
 	builder      *builder.Builder
+	txValidator  TxValidator
 	blockStore   BlockStore
 	payloadStore payloadstore.PayloadStore
 	lock         sync.RWMutex
 }
 
-func NewEngineAPI(builder *builder.Builder, blockStore BlockStore) *EngineAPI {
+type TxValidator interface {
+	CheckTx(abci.RequestCheckTx) abci.ResponseCheckTx
+}
+
+func NewEngineAPI(builder *builder.Builder, txValidator TxValidator, blockStore BlockStore) *EngineAPI {
 	return &EngineAPI{
+		txValidator:  txValidator,
 		blockStore:   blockStore,
 		builder:      builder,
 		payloadStore: payloadstore.NewPayloadStore(),
@@ -111,81 +122,103 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	e.blockStore.UpdateLabel(eth.Safe, fcs.SafeBlockHash)
 	e.blockStore.UpdateLabel(eth.Finalized, fcs.FinalizedBlockHash)
 
-	if pa != nil {
-		// Ethereum execution specs:
-		//   https://github.com/ethereum/execution-specs/blob/119208cf1a13d5002074bcee3b8ea4ef096eeb0d/src/ethereum/shanghai/fork.py#L298
-		if headTime := e.blockStore.HeadBlock().Header.Time; uint64(pa.Timestamp) <= headTime {
-			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("timestamp too small: parent timestamp %d, got %d", headTime, pa.Timestamp))
-		}
-
-		// Docs on OP PayloadAttributes struct:
-		//   Withdrawals... should be nil or empty depending on Shanghai enablement
-		//   Starting at Ecotone, the parentBeaconBlockRoot must be set to the L1 origin parentBeaconBlockRoot, or a zero bytes32 if the Dencun functionality with parentBeaconBlockRoot is not active on L1.
-		// We don't make any judgements about what hard fork is on L1.
-		// We can change this later if it becomes an issue, but right now it just prevents us from using Geth in PoW clique mode for devnets.
-
-		// OP Spec:
-		//   The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup.
-		//   This field overrides the gas limit used during block-building. If not specified as rollup, a STATUS_INVALID is returned.
-		// Monomer is always used as a rollup.
-		// I do not know how to reconcile the above with:
+	if pa == nil {
 		// Engine API spec:
-		//   Client software MUST respond to this method call in the following way: ...
-		//     [InvalidPayloadAttributes] if the payload is deemed VALID and forkchoiceState has been applied successfully, but no build process has been started due to invalid payloadAttributes.
-		// STATUS_INVALID is only for applying the head block payload (which doesn't really apply to us anyway since we would have already built, committed, and proposed the head block).
-		// OP-Geth returns InvalidParams.
-		if pa.GasLimit == nil {
-			return nil, engine.InvalidPayloadAttributes.With(errors.New("gas limit not provided"))
-		}
+		//   `payloadId: null`... if the payload is deemed VALID and a build process hasn't been started.
+		return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, nil), nil
+	}
 
-		// OP Spec:
-		//   If the transactions field is present, the engine must execute the transactions in order and return STATUS_INVALID if there is an error processing the transactions.
-		//   It must return STATUS_VALID if all of the transactions could be executed without error.
-		// TODO
-		//   - may require modifying the builder to BeginBlock and DeliverTx separately from the rest of the build process.
+	// Ethereum execution specs:
+	//   https://github.com/ethereum/execution-specs/blob/119208cf1a13d5002074bcee3b8ea4ef096eeb0d/src/ethereum/shanghai/fork.py#L298
+	if headTime := e.blockStore.HeadBlock().Header.Time; uint64(pa.Timestamp) <= headTime {
+		return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("timestamp too small: parent timestamp %d, got %d", headTime, pa.Timestamp))
+	}
 
-		// Engine API spec:
-		//   Client software MUST begin a payload build process building on top of forkchoiceState.headBlockHash and identified via buildProcessId value if payloadAttributes
-		//   is not null and the forkchoice state has been updated successfully.
-		payload := eetypes.NewPayload(pa, fcs.HeadBlockHash, e.blockStore.HeadBlock().Header.Height+1)
-		payloadId, err := payload.GetPayloadID()
-		if err != nil {
-			return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("get payload id: %v", err))
-		}
-		if err := e.payloadStore.Add(payload); err != nil {
-			return nil, engine.GenericServerError.With(fmt.Errorf("add payload to store: %v", err))
-		}
+	// Docs on OP PayloadAttributes struct:
+	//   Withdrawals... should be nil or empty depending on Shanghai enablement
+	//   Starting at Ecotone, the parentBeaconBlockRoot must be set to the L1 origin parentBeaconBlockRoot, or a zero bytes32 if the Dencun functionality with parentBeaconBlockRoot is not active on L1.
+	// We don't make any judgements about what hard fork is on L1.
+	// We can change this later if it becomes an issue, but right now it just prevents us from using Geth in PoW clique mode for devnets.
 
-		// Engine API spec:
-		//   latestValidHash: ... the hash of the most recent valid block in the branch defined by payload and its ancestors.
-		// Recall that "payload" refers to the most recent block appended to the canonical chain, not the payload attributes.
-		return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, payloadId), nil
+	// OP Spec:
+	//   The gasLimit is optional w.r.t. compatibility with L1, but required when used as rollup.
+	//   This field overrides the gas limit used during block-building. If not specified as rollup, a STATUS_INVALID is returned.
+	// Monomer is always used as a rollup.
+	// I do not know how to reconcile the above with:
+	// Engine API spec:
+	//   Client software MUST respond to this method call in the following way: ...
+	//     [InvalidPayloadAttributes] if the payload is deemed VALID and forkchoiceState has been applied successfully, but no build process has been started due to invalid payloadAttributes.
+	// STATUS_INVALID is only for applying the head block payload and executing and checking the payload transactions.
+	// OP-Geth returns InvalidParams.
+	if pa.GasLimit == nil {
+		return nil, engine.InvalidPayloadAttributes.With(errors.New("gas limit not provided"))
+	}
+
+	cosmosTxs, err := cosmosTxsFromPayloadTxs(pa.Transactions)
+	if err != nil {
+		return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("convert payload attributes txs to cosmos txs: %v", err))
+	}
+
+	// OP Spec:
+	//   If the transactions field is present, the engine must execute the transactions in order and return STATUS_INVALID if there is an error processing the transactions.
+	//   It must return STATUS_VALID if all of the transactions could be executed without error.
+	// TODO how to reset checktx state once we've finished calling CheckTx?
+	for _, txBytes := range cosmosTxs {
+		resp := e.txValidator.CheckTx(abci.RequestCheckTx{
+			Tx: txBytes,
+		})
+		if resp.IsErr() {
+			return &eth.ForkchoiceUpdatedResult{
+				PayloadStatus: eth.PayloadStatusV1{
+					Status:          eth.ExecutionInvalid,
+					LatestValidHash: &fcs.HeadBlockHash,
+				},
+			}, nil
+		}
+	}
+
+	payload := &eetypes.Payload{
+		Timestamp:             uint64(pa.Timestamp),
+		PrevRandao:            pa.PrevRandao,
+		SuggestedFeeRecipient: pa.SuggestedFeeRecipient,
+		Withdrawals:           pa.Withdrawals,
+		NoTxPool:              pa.NoTxPool,
+		GasLimit:              uint64(*pa.GasLimit),
+		ParentBeaconBlockRoot: pa.ParentBeaconBlockRoot,
+		ParentHash:            fcs.HeadBlockHash,
+		Height:                e.blockStore.HeadBlock().Header.Height + 1,
+		Transactions:          pa.Transactions,
+		CosmosTxs:             cosmosTxs,
 	}
 
 	// Engine API spec:
-	//   `payloadId: null`... if the payload is deemed VALID and a build process hasn't been started.
-	return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, nil), nil
+	//   Client software MUST begin a payload build process building on top of forkchoiceState.headBlockHash and identified via buildProcessId value if payloadAttributes
+	//   is not null and the forkchoice state has been updated successfully.
+	e.payloadStore.Add(payload)
+
+	// Engine API spec:
+	//   latestValidHash: ... the hash of the most recent valid block in the branch defined by payload and its ancestors.
+	// Recall that "payload" refers to the most recent block appended to the canonical chain, not the payload attributes.
+	return eetypes.ValidForkchoiceUpdateResult(&fcs.HeadBlockHash, payload.ID()), nil
 }
 
-func (e *EngineAPI) GetPayloadV1(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV1(payloadID engine.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	// TODO should this be called after Ecotone?
 	return e.GetPayloadV3(payloadID)
 }
 
-func (e *EngineAPI) GetPayloadV2(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV2(payloadID engine.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	// TODO should this be called after Ecotone?
 	return e.GetPayloadV3(payloadID)
 }
 
 // GetPayloadV3 seals a payload that is currently being built (i.e. was introduced in the PayloadAttributes from a previous ForkchoiceUpdated call).
-func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
+func (e *EngineAPI) GetPayloadV3(payloadID engine.PayloadID) (*eth.ExecutionPayloadEnvelope, error) {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 
 	payload := e.payloadStore.Current()
-	if currentID, err := payload.GetPayloadID(); err != nil {
-		return nil, engine.GenericServerError.With(fmt.Errorf("calculate id of current payload: %v", err))
-	} else if payloadID != *currentID {
+	if currentID := payload.ID(); payloadID != *currentID {
 		return nil, engine.InvalidParams.With(errors.New("payload is not current"))
 	}
 
@@ -193,24 +226,14 @@ func (e *EngineAPI) GetPayloadV3(payloadID eetypes.PayloadID) (*eth.ExecutionPay
 	// for now assume block is sealed by this call
 	// TODO what does the above todo mean?
 	if err := e.builder.Build(&builder.Payload{
-		Transactions: func() bfttypes.Txs {
-			var txs bfttypes.Txs
-			for _, tx := range payload.Attrs.Transactions {
-				txs = append(txs, bfttypes.Tx(tx))
-			}
-			// TODO we want to make a tx compatible with the rollup module.
-			//   Ideally we solve the root of the problem and have already delivered the rollup txs in ForkchoiceUpdated.
-			//   Then we can remove the Transactions field from builder.Payload.
-			return txs
-		}(),
-		// We know it is non-nil from payload validation.
-		// TODO make payloadstore store `builder.Payload`s.
-		GasLimit:  uint64(*payload.Attrs.GasLimit),
-		Timestamp: uint64(payload.Attrs.Timestamp),
-		// TODO don't ignore the NoTxPool option.
+		Transactions: payload.CosmosTxs,
+		GasLimit:     payload.GasLimit,
+		Timestamp:    payload.Timestamp,
+		NoTxPool:     payload.NoTxPool,
 	}); err != nil {
 		log.Panicf("failed to commit block: %v", err) // TODO error handling. An error here is potentially a big problem.
 	}
+	// TODO remove payload from payload store.
 
 	return payload.ToExecutionPayloadEnvelope(e.blockStore.HeadBlock().Hash()), nil
 }
@@ -241,4 +264,28 @@ func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStat
 		Status:          eth.ExecutionValid,
 		LatestValidHash: &headBlockHash,
 	}, nil
+}
+
+func cosmosTxsFromPayloadTxs(ethTxs []hexutil.Bytes) (bfttypes.Txs, error) {
+	if len(ethTxs) == 0 {
+		return nil, errors.New("L1 Attributes transaction not found")
+	}
+
+	var numDepositTxs int
+	for _, txBytes := range ethTxs {
+		var tx ethtypes.Transaction
+		if err := tx.UnmarshalBinary(txBytes); err != nil {
+			break
+		}
+		numDepositTxs++
+	}
+	var txs [][]byte
+	for _, txBytes := range ethTxs {
+		txs = append(txs, txBytes)
+	}
+	despositsMsgBytes, err := rolluptypes.NewMsgL1Txs(txs[:numDepositTxs]).Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("new msg L1 txs: %v", err)
+	}
+	return bfttypes.ToTxs(slices.Insert(txs[numDepositTxs:], 0, despositsMsgBytes)), nil
 }

@@ -87,9 +87,12 @@ func TestBuild(t *testing.T) {
 			})
 			txStore := txstore.NewTxStore(txdb)
 
-			g := &genesis.Genesis{}
-
-			app := testapp.NewTest(t, g.ChainID.String())
+			var chainID eetypes.ChainID
+			app := testapp.NewTest(t, chainID.String())
+			g := &genesis.Genesis{
+				ChainID:  chainID,
+				AppState: testapp.MakeGenesisAppState(t, app),
+			}
 
 			eventBus := bfttypes.NewEventBus()
 			require.NoError(t, eventBus.Start())
@@ -193,9 +196,12 @@ func TestRollback(t *testing.T) {
 	})
 	txStore := txstore.NewTxStore(txdb)
 
-	g := &genesis.Genesis{}
-
-	app := testapp.NewTest(t, g.ChainID.String())
+	var chainID eetypes.ChainID
+	app := testapp.NewTest(t, chainID.String())
+	g := &genesis.Genesis{
+		ChainID:  chainID,
+		AppState: testapp.MakeGenesisAppState(t, app),
+	}
 
 	eventBus := bfttypes.NewEventBus()
 	require.NoError(t, eventBus.Start())
@@ -285,9 +291,12 @@ func TestBuildNoTxPool(t *testing.T) {
 	})
 	txStore := txstore.NewTxStore(txdb)
 
-	g := &genesis.Genesis{}
-
-	app := testapp.NewTest(t, g.ChainID.String())
+	var chainID eetypes.ChainID
+	app := testapp.NewTest(t, chainID.String())
+	g := &genesis.Genesis{
+		ChainID:  chainID,
+		AppState: testapp.MakeGenesisAppState(t, app),
+	}
 
 	eventBus := bfttypes.NewEventBus()
 	require.NoError(t, eventBus.Start())

@@ -1,6 +1,8 @@
 package genesis
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -20,6 +22,14 @@ const defaultGasLimit = 30_000_000
 
 // Commit assumes the application has not been initialized and that the block store is empty.
 func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWriter) error {
+	// Sanity check the json.
+	{
+		b := new(json.RawMessage)
+		if err := json.Unmarshal(g.AppState, &b); err != nil {
+			return fmt.Errorf("app state is invalid json: %v", err)
+		}
+	}
+
 	const initialHeight = 1
 	app.InitChain(abci.RequestInitChain{
 		ChainId:       g.ChainID.String(),

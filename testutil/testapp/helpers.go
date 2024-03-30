@@ -1,6 +1,7 @@
 package testapp
 
 import (
+	"encoding/json"
 	"testing"
 
 	tmdb "github.com/cometbft/cometbft-db"
@@ -9,6 +10,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	testappv1 "github.com/polymerdao/monomer/testutil/testapp/gen/testapp/v1"
+	"github.com/polymerdao/monomer/testutil/testapp/x/testmodule"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,6 +20,29 @@ func NewTest(t *testing.T, chainID string) *App {
 		require.NoError(t, appdb.Close())
 	})
 	return New(appdb, chainID, log.NewNopLogger())
+}
+
+func MakeGenesisAppState(t *testing.T, app *App, kvs ...string) []byte {
+	require.True(t, len(kvs) % 2 == 0)
+	defaultGenesis := app.defaultGenesis()
+	kvsMap := make(map[string]string)
+	require.NoError(t, json.Unmarshal(defaultGenesis[testmodule.ModuleName], &kvsMap))
+	{
+		var k string
+		for i, x := range kvs {
+			if i % 2 == 0 {
+				k = x
+			} else {
+				kvsMap[k] = x
+			}
+		}
+	}
+	kvsMapBytes, err := json.Marshal(kvsMap)
+	require.NoError(t, err)
+	defaultGenesis[testmodule.ModuleName] = kvsMapBytes
+	genesisBytes, err := json.Marshal(defaultGenesis)
+	require.NoError(t, err)
+	return genesisBytes
 }
 
 // ToTxs converts the key-values to SetRequest sdk.Msgs and marshals the messages to protobuf wire format.
@@ -43,7 +68,7 @@ func ToTxs(t *testing.T, kvs map[string]string) [][]byte {
 	return txs
 }
 
-// StateContains ensures the key-values exist in the app's state.
+// StateContains ensures the key-values exist in the testmodule's state.
 func (a *App) StateContains(t *testing.T, height uint64, kvs map[string]string) {
 	if len(kvs) == 0 {
 		return
@@ -55,7 +80,7 @@ func (a *App) StateContains(t *testing.T, height uint64, kvs map[string]string) 
 		}).Marshal()
 		require.NoError(t, err)
 		resp := a.Query(abcitypes.RequestQuery{
-			Path:   "/testapp.v1.GetService/Get", // TODO is there a way to find this programmatically?
+			Path:   "/testapp.v1.GetService/Get",
 			Data:   requestBytes,
 			Height: int64(height),
 		})
