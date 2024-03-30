@@ -50,7 +50,8 @@ type Block struct {
 // Hash returns a unique hash of the block, used as the block identifier
 func (b *Block) Hash() common.Hash {
 	if b.Header.Hash == (common.Hash{}) {
-		_, txCommitment := b.ethLikeTransactions()
+		// We exclude the tx commitment.
+		// TODO better hashing technique than using Ethereum's.
 		b.Header.Hash = (&types.Header{
 			ParentHash:      b.Header.ParentHash,
 			Root:            common.BytesToHash(b.Header.AppHash), // TODO actually take the keccak
@@ -58,7 +59,6 @@ func (b *Block) Hash() common.Hash {
 			GasLimit:        uint64(b.Header.GasLimit),
 			MixDigest:       common.Hash{},
 			Time:            b.Header.Time,
-			TxHash:          txCommitment,
 			UncleHash:       types.EmptyUncleHash,
 			ReceiptHash:     types.EmptyReceiptsHash,
 			BaseFee:         common.Big0,
@@ -68,13 +68,18 @@ func (b *Block) Hash() common.Hash {
 	return b.Header.Hash
 }
 
+// CosmosTxAdapter transforms Cosmos transactions into Ethereum transactions.
+//
+// In practice, this will use msg types from Monomer's rollup module, but importing the rollup module here would create a circular module
+// dependency between Monomer, the SDK, and the rollup module. sdk -> monomer -> rollup -> sdk, where -> is "depends on".
+type CosmosTxAdapter func(cosmosTxs bfttypes.Txs) (types.Transactions, error)
+
 // This trick is played by the eth rpc server too. Instead of constructing
 // an actual eth block, simply create a map with the right keys so the client
 // can unmarshal it into a block
-func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
+func (b *Block) ToEthLikeBlock(txs types.Transactions, inclTxs bool) map[string]any {
 	excessBlobGas := hexutil.Uint64(0)
 	blockGasUsed := hexutil.Uint64(0)
-
 	result := map[string]any{
 		// These are the ones that make sense to polymer.
 		"parentHash": b.Header.ParentHash,
@@ -99,31 +104,10 @@ func (b *Block) ToEthLikeBlock(inclTx bool) map[string]any {
 		"blobGasUsed":           &blockGasUsed,
 		"excessBlobGas":         &excessBlobGas,
 		"parentBeaconBlockRoot": common.Hash{},
+		"transactionsRoot":      types.DeriveSha(txs, trie.NewStackTrie(nil)),
 	}
-
-	txs, root := b.ethLikeTransactions()
-	if inclTx {
-		result["transactionsRoot"] = root
+	if inclTxs {
 		result["transactions"] = txs
-	} else {
-		result["transactionsRoot"] = root
 	}
 	return result
-}
-
-func (b *Block) ethLikeTransactions() (types.Transactions, common.Hash) {
-	var txs types.Transactions
-	for _, tx := range b.Txs {
-		// TODO: update to use proper Gas and To values if possible
-		txData := &types.DynamicFeeTx{
-			ChainID: new(big.Int).SetUint64(uint64(b.Header.ChainID)),
-			Data:    tx,
-			Gas:     0,
-			Value:   big.NewInt(0),
-			To:      nil,
-		}
-		tx := types.NewTx(txData)
-		txs = append(txs, tx)
-	}
-	return txs, types.DeriveSha(txs, trie.NewStackTrie(nil))
 }

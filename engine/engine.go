@@ -163,11 +163,14 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 	if err != nil {
 		return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("convert payload attributes txs to cosmos txs: %v", err))
 	}
+	if len(cosmosTxs) == 0 {
+		return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("L1 Attributes tx not found"))
+	}
 
 	// OP Spec:
 	//   If the transactions field is present, the engine must execute the transactions in order and return STATUS_INVALID if there is an error processing the transactions.
 	//   It must return STATUS_VALID if all of the transactions could be executed without error.
-	// TODO how to reset checktx state once we've finished calling CheckTx?
+	// TODO checktx doesn't actually run the tx, it only does basic validation.
 	for _, txBytes := range cosmosTxs {
 		resp := e.txValidator.CheckTx(abci.RequestCheckTx{
 			Tx: txBytes,

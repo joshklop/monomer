@@ -48,9 +48,9 @@ func (g *Genesis) Commit(app peptide.Application, blockStore store.BlockStoreWri
 		},
 	}
 	blockStore.AddBlock(block)
-	for _, label := range []eth.BlockLabel{eth.Unsafe, eth.Finalized, eth.Safe} {
+	for _, label := range []eth.BlockLabel{eth.Unsafe, eth.Safe, eth.Finalized} {
 		if err := blockStore.UpdateLabel(label, block.Hash()); err != nil {
-			panic(err)
+			panic(fmt.Errorf("update label: %v", err)) // TODO a big problem if this panics. DB would be corrupted.
 		}
 	}
 	return nil

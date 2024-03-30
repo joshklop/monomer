@@ -148,8 +148,8 @@ func run(ctx context.Context) error {
 		*eth.BlockByHash
 	}{
 		ChainID:       eth.NewChainID(config.Genesis.ChainID.HexBig()),
-		BlockByNumber: eth.NewBlockByNumber(blockStore),
-		BlockByHash:   eth.NewBlockByHash(blockStore),
+		BlockByNumber: eth.NewBlockByNumber(blockStore, rolluptypes.AdaptCosmosTxsToEthTxs),
+		BlockByHash:   eth.NewBlockByHash(blockStore, rolluptypes.AdaptCosmosTxsToEthTxs),
 	}
 	n := newNodeService(
 		rpcee.NewEeRpcServer(config.EthHost, config.EthPort, []ethrpc.API{
@@ -164,7 +164,7 @@ func run(ctx context.Context) error {
 				Service: engine.NewEngineAPI(
 					builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID),
 					app,
-					rolluptypes.AdaptPayloadTxs,
+					rolluptypes.AdaptPayloadTxsToCosmosTxs,
 					blockStore,
 				),
 			},

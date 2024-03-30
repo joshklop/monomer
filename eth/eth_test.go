@@ -4,11 +4,15 @@ import (
 	"testing"
 
 	dbm "github.com/cometbft/cometbft-db"
+	bfttypes "github.com/cometbft/cometbft/types"
 	opeth "github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/eth"
+	rolluptypes "github.com/polymerdao/monomer/x/rollup/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,15 +77,15 @@ func TestGetBlockByNumber(t *testing.T) {
 				"exclude txs": false,
 			} {
 				t.Run(description, func(t *testing.T) {
-					s := eth.NewBlockByNumber(blockStore)
+					s := eth.NewBlockByNumber(blockStore, rolluptypes.AdaptCosmosTxsToEthTxs)
 					got, err := s.GetBlockByNumber(test.id, includeTxs)
 					if test.want == nil {
-						require.Error(t, err)
+						require.ErrorIs(t, err, ethereum.NotFound)
 						require.Nil(t, got)
 						return
 					}
 					require.NoError(t, err)
-					require.Equal(t, test.want.ToEthLikeBlock(includeTxs), got)
+					require.Equal(t, test.want.ToEthLikeBlock(ethTxs(t, block.Txs), includeTxs), got)
 				})
 			}
 		})
@@ -107,10 +111,10 @@ func TestGetBlockByHash(t *testing.T) {
 	} {
 		t.Run(description, func(t *testing.T) {
 			t.Run("block hash 1 exists", func(t *testing.T) {
-				e := eth.NewBlockByHash(blockStore)
+				e := eth.NewBlockByHash(blockStore, rolluptypes.AdaptCosmosTxsToEthTxs)
 				got, err := e.GetBlockByHash(block.Header.Hash, inclTx)
 				require.NoError(t, err)
-				require.Equal(t, block.ToEthLikeBlock(inclTx), got)
+				require.Equal(t, block.ToEthLikeBlock(ethTxs(t, block.Txs), inclTx), got)
 			})
 		})
 		t.Run("block hash 0 does not exist", func(t *testing.T) {
@@ -119,12 +123,18 @@ func TestGetBlockByHash(t *testing.T) {
 				"exclude txs": false,
 			} {
 				t.Run(description, func(t *testing.T) {
-					e := eth.NewBlockByHash(blockStore)
+					e := eth.NewBlockByHash(blockStore, rolluptypes.AdaptCosmosTxsToEthTxs)
 					got, err := e.GetBlockByHash(common.Hash{}, inclTx)
 					require.Nil(t, got)
-					require.ErrorContains(t, err, "not found")
+					require.ErrorIs(t, err, ethereum.NotFound)
 				})
 			}
 		})
 	}
+}
+
+func ethTxs(t *testing.T, cosmosTxs bfttypes.Txs) ethtypes.Transactions {
+	txs, err := rolluptypes.AdaptCosmosTxsToEthTxs(cosmosTxs)
+	require.NoError(t, err)
+	return txs
 }
