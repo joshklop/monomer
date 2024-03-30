@@ -3,6 +3,7 @@ package eth
 import (
 	"errors"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/polymerdao/monomer/app/peptide/store"
 )
@@ -37,4 +38,22 @@ func (e *BlockByNumber) GetBlockByNumber(id BlockID, inclTx bool) (map[string]an
 		return nil, errors.New("not found")
 	}
 	return b.ToEthLikeBlock(inclTx), nil
+}
+
+type BlockByHash struct {
+	blockStore store.BlockStoreReader
+}
+
+func NewBlockByHash(blockStore store.BlockStoreReader) *BlockByHash {
+	return &BlockByHash{
+		blockStore: blockStore,
+	}
+}
+
+func (e *BlockByHash) GetBlockByHash(hash common.Hash, inclTx bool) (map[string]any, error) {
+	block := e.blockStore.BlockByHash(hash)
+	if block == nil {
+		return nil, errors.New("not found")
+	}
+	return block.ToEthLikeBlock(inclTx), nil
 }

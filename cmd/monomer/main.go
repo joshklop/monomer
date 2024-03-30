@@ -25,6 +25,7 @@ import (
 	"github.com/polymerdao/monomer/genesis"
 	"github.com/polymerdao/monomer/mempool"
 	"github.com/polymerdao/monomer/testutil/testapp"
+	rolluptypes "github.com/polymerdao/monomer/x/rollup/types"
 )
 
 type Config struct {
@@ -144,9 +145,11 @@ func run(ctx context.Context) error {
 	ethAPI := struct {
 		*eth.ChainID
 		*eth.BlockByNumber
+		*eth.BlockByHash
 	}{
 		ChainID:       eth.NewChainID(config.Genesis.ChainID.HexBig()),
 		BlockByNumber: eth.NewBlockByNumber(blockStore),
+		BlockByHash:   eth.NewBlockByHash(blockStore),
 	}
 	n := newNodeService(
 		rpcee.NewEeRpcServer(config.EthHost, config.EthPort, []ethrpc.API{
@@ -158,7 +161,12 @@ func run(ctx context.Context) error {
 		rpcee.NewEeRpcServer(config.EngineHost, config.EnginePort, []ethrpc.API{
 			{
 				Namespace: "engine",
-				Service:   engine.NewEngineAPI(builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID), app, blockStore),
+				Service: engine.NewEngineAPI(
+					builder.New(mpool, app, blockStore, txStore, eventBus, config.Genesis.ChainID),
+					app,
+					rolluptypes.AdaptPayloadTxs,
+					blockStore,
+				),
 			},
 			{
 				Namespace: "eth",

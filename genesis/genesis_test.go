@@ -55,10 +55,8 @@ func TestCommit(t *testing.T) {
 			require.Equal(t, int64(1), info.GetLastBlockHeight()) // This means that the genesis height was set correctly.
 			{
 				// Ensure testmodule state was set correctly.
-				state := make(map[string]json.RawMessage) // It is ok to assume the format of the genesis state because it is defined by the test input.
-				require.NoError(t, json.Unmarshal(test.genesis.AppState, &state))
 				kvs := make(map[string]string)
-				require.NoError(t, json.Unmarshal(state[testmodule.ModuleName], &kvs))
+				require.NoError(t, json.Unmarshal(test.genesis.AppState[testmodule.ModuleName], &kvs))
 				app.StateContains(t, uint64(info.GetLastBlockHeight()), kvs)
 			}
 			// Even though RequestInitChain contains the chain ID, we can't test that it was set properly since the ABCI doesn't expose it.

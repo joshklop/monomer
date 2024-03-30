@@ -43,24 +43,21 @@ func New(key *storetypes.KVStoreKey) *Module {
 }
 
 func (m *Module) InitGenesis(ctx sdk.Context, _ codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
-	validatorUpdates := []abci.ValidatorUpdate{
-		{
-			PubKey: crypto.PublicKey{},
-			Power:  sdk.DefaultPowerReduction.Int64(),
-		},
-	}
-	if data == nil {
-		return validatorUpdates
-	}
 	genesis := make(map[string]string)
-	if err := json.Unmarshal(data, &genesis); err != nil {
+	if err := json.Unmarshal(data, &genesis); err != nil {	// The sdk ensures the data is never nil.
 		panic(fmt.Errorf("unmarshal genesis data: %v", err))
 	}
 	store := ctx.KVStore(m.key)
 	for k, v := range genesis {
 		store.Set([]byte(k), []byte(v))
 	}
-	return validatorUpdates
+	return []abci.ValidatorUpdate{
+		{
+			PubKey: crypto.PublicKey{},
+			Power:  sdk.DefaultPowerReduction.Int64(),
+		},
+	}
+
 }
 
 func (m *Module) ExportGenesis(_ sdk.Context, _ codec.JSONCodec) json.RawMessage {

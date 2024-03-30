@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"slices"
 	"sync"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -13,12 +12,10 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/engine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	eetypes "github.com/polymerdao/monomer/app/node/types"
 	"github.com/polymerdao/monomer/app/peptide/payloadstore"
 	"github.com/polymerdao/monomer/app/peptide/store"
 	"github.com/polymerdao/monomer/builder"
-	rolluptypes "github.com/polymerdao/polymerase/chain/x/rollup/types"
 )
 
 type BlockStore interface {
@@ -33,19 +30,27 @@ type EngineAPI struct {
 	txValidator  TxValidator
 	blockStore   BlockStore
 	payloadStore payloadstore.PayloadStore
+	adapter      PayloadTxAdapter
 	lock         sync.RWMutex
 }
+
+// PayloadTxAdapter transforms Op payload transactions into Cosmos transactions.
+//
+// In practice, this will use msg types from Monomer's rollup module, but importing the rollup module here would create a circular module
+// dependency between Monomer, the SDK, and the rollup module. sdk -> monomer -> rollup -> sdk, where -> is "depends on".
+type PayloadTxAdapter func(ethTxs []hexutil.Bytes) (bfttypes.Txs, error)
 
 type TxValidator interface {
 	CheckTx(abci.RequestCheckTx) abci.ResponseCheckTx
 }
 
-func NewEngineAPI(builder *builder.Builder, txValidator TxValidator, blockStore BlockStore) *EngineAPI {
+func NewEngineAPI(builder *builder.Builder, txValidator TxValidator, adapter PayloadTxAdapter, blockStore BlockStore) *EngineAPI {
 	return &EngineAPI{
 		txValidator:  txValidator,
 		blockStore:   blockStore,
 		builder:      builder,
 		payloadStore: payloadstore.NewPayloadStore(),
+		adapter:      adapter,
 	}
 }
 
@@ -154,7 +159,7 @@ func (e *EngineAPI) ForkchoiceUpdatedV3(
 		return nil, engine.InvalidPayloadAttributes.With(errors.New("gas limit not provided"))
 	}
 
-	cosmosTxs, err := cosmosTxsFromPayloadTxs(pa.Transactions)
+	cosmosTxs, err := e.adapter(pa.Transactions)
 	if err != nil {
 		return nil, engine.InvalidPayloadAttributes.With(fmt.Errorf("convert payload attributes txs to cosmos txs: %v", err))
 	}
@@ -224,7 +229,6 @@ func (e *EngineAPI) GetPayloadV3(payloadID engine.PayloadID) (*eth.ExecutionPayl
 
 	// TODO: handle time slot based block production
 	// for now assume block is sealed by this call
-	// TODO what does the above todo mean?
 	if err := e.builder.Build(&builder.Payload{
 		Transactions: payload.CosmosTxs,
 		GasLimit:     payload.GasLimit,
@@ -264,28 +268,4 @@ func (e *EngineAPI) NewPayloadV3(payload eth.ExecutionPayload) (*eth.PayloadStat
 		Status:          eth.ExecutionValid,
 		LatestValidHash: &headBlockHash,
 	}, nil
-}
-
-func cosmosTxsFromPayloadTxs(ethTxs []hexutil.Bytes) (bfttypes.Txs, error) {
-	if len(ethTxs) == 0 {
-		return nil, errors.New("L1 Attributes transaction not found")
-	}
-
-	var numDepositTxs int
-	for _, txBytes := range ethTxs {
-		var tx ethtypes.Transaction
-		if err := tx.UnmarshalBinary(txBytes); err != nil {
-			break
-		}
-		numDepositTxs++
-	}
-	var txs [][]byte
-	for _, txBytes := range ethTxs {
-		txs = append(txs, txBytes)
-	}
-	despositsMsgBytes, err := rolluptypes.NewMsgL1Txs(txs[:numDepositTxs]).Marshal()
-	if err != nil {
-		return nil, fmt.Errorf("new msg L1 txs: %v", err)
-	}
-	return bfttypes.ToTxs(slices.Insert(txs[numDepositTxs:], 0, despositsMsgBytes)), nil
 }

@@ -22,9 +22,9 @@ func NewTest(t *testing.T, chainID string) *App {
 	return New(appdb, chainID, log.NewNopLogger())
 }
 
-func MakeGenesisAppState(t *testing.T, app *App, kvs ...string) []byte {
+func MakeGenesisAppState(t *testing.T, app *App, kvs ...string) map[string]json.RawMessage {
 	require.True(t, len(kvs) % 2 == 0)
-	defaultGenesis := app.defaultGenesis()
+	defaultGenesis := app.DefaultGenesis()
 	kvsMap := make(map[string]string)
 	require.NoError(t, json.Unmarshal(defaultGenesis[testmodule.ModuleName], &kvsMap))
 	{
@@ -40,9 +40,7 @@ func MakeGenesisAppState(t *testing.T, app *App, kvs ...string) []byte {
 	kvsMapBytes, err := json.Marshal(kvsMap)
 	require.NoError(t, err)
 	defaultGenesis[testmodule.ModuleName] = kvsMapBytes
-	genesisBytes, err := json.Marshal(defaultGenesis)
-	require.NoError(t, err)
-	return genesisBytes
+	return defaultGenesis
 }
 
 // ToTxs converts the key-values to SetRequest sdk.Msgs and marshals the messages to protobuf wire format.

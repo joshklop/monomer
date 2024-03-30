@@ -201,6 +201,6 @@ func New(appdb dbm.DB, chainID string, logger log.Logger) *App {
 	}
 }
 
-func (a *App) defaultGenesis() map[string]json.RawMessage {
+func (a *App) DefaultGenesis() map[string]json.RawMessage {
 	return a.basicManager.DefaultGenesis(a.codec)
 }

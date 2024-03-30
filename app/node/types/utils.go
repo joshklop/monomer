@@ -58,17 +58,19 @@ func (p *Payload) ID() *engine.PayloadID {
 
 // ToExecutionPayloadEnvelope converts a Payload to an ExecutionPayload.
 func (p *Payload) ToExecutionPayloadEnvelope(blockHash common.Hash) *eth.ExecutionPayloadEnvelope {
-	return &eth.ExecutionPayloadEnvelope{ExecutionPayload: &eth.ExecutionPayload{
-		ParentHash:   p.ParentHash,
-		BlockNumber:  hexutil.Uint64(p.Height),
-		BlockHash:    blockHash,
-		FeeRecipient: p.SuggestedFeeRecipient,
-		Timestamp:    hexutil.Uint64(p.Timestamp),
-		PrevRandao:   p.PrevRandao,
-		Withdrawals:  p.Withdrawals,
-		Transactions: p.Transactions,
-		GasLimit:     hexutil.Uint64(p.GasLimit),
-	}}
+	return &eth.ExecutionPayloadEnvelope{
+		ExecutionPayload: &eth.ExecutionPayload{
+			ParentHash:   p.ParentHash,
+			BlockNumber:  hexutil.Uint64(p.Height),
+			BlockHash:    blockHash,
+			FeeRecipient: p.SuggestedFeeRecipient,
+			Timestamp:    hexutil.Uint64(p.Timestamp),
+			PrevRandao:   p.PrevRandao,
+			Withdrawals:  p.Withdrawals,
+			Transactions: p.Transactions,
+			GasLimit:     hexutil.Uint64(p.GasLimit),
+		},
+	}
 }
 
 // ValidForkchoiceUpdateResult returns a valid ForkchoiceUpdateResult with given head block hash.
